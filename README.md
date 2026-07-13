@@ -1,95 +1,95 @@
-<div align="center">
-  <img src="https://via.placeholder.com/150x150/09090b/22d3ee?text=TERMICODE" alt="TermiCode Logo">
-  
-  <h1>TermiCode AI Coding Assistant</h1>
-  <p>A blazing fast, private, local AI coding assistant running directly in your terminal, powered by OpenRouter and 100+ AI models.</p>
+# TermiCode
 
-  [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-  [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
-</div>
+TermiCode is an interactive terminal-based AI coding assistant built for local development workflows. It helps you inspect a repository, make safe code changes, and run lightweight automation tasks without leaving the terminal.
 
----
+It uses OpenRouter-backed models, includes guardrails for sensitive files, supports surgical file edits, and offers a set of slash commands for repository exploration, refactoring, and session management.
 
-TermiCode is a terminal-based Micro-SaaS AI coding assistant built for speed and security. It reads your codebase, modifies files securely via surgical edits, and can even run terminal commands (with your permission). Because it leverages OpenRouter's marketplace of 100+ AI models, TermiCode gives you access to the best models from Anthropic, Google, Meta, Mistral, and more.
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
 
-**Bring Your Own Key (BYOK)**: No monthly subscriptions. No bloated Electron apps.
+## ✨ What it does
 
-## ✨ Features
-- **⚡ Multi-Model Access**: Powered by OpenRouter with access to 100+ AI models from Anthropic, Google, Meta, Mistral, and more.
-- **🛡️ Secure File Operations**: Built-in path traversal protection and a blocklist for sensitive files (like `.env`).
-- **👀 Surgical Edits**: Modifies existing files precisely without rewriting the whole document, saving tokens and preventing hallucinations.
-- **🖥️ Beautiful Terminal UI**: Powered by `rich` for elegant panels, Markdown rendering, and live spinners.
-- **🧠 Long-Term Memory**: Automatically summarizes past context to preserve memory without exceeding token limits.
-- **🚦 Command Execution**: Can run test suites, git commands, and shell scripts on your behalf (always asks for permission first).
+- Works directly in your terminal with an interactive chat-style interface.
+- Reads the current project structure and helps you understand the codebase.
+- Performs targeted file edits instead of rewriting whole files.
+- Protects sensitive paths such as .env and other guarded files.
+- Supports slash commands for mapping the repo, resetting context, generating reports, and triggering refactor workflows.
 
 ## 🚀 Installation
 
-### Option 1: Install globally via pipx (Recommended)
-`pipx` installs Python CLI applications into isolated environments so they don't break your system Python.
+### With pipx (recommended)
+
 ```bash
-pipx install termicode-ai
+pipx install termicode
 ```
 
-### Option 2: Install via pip
+### With pip
+
 ```bash
-pip install termicode-ai
+pip install termicode
+```
+
+### From source
+
+```bash
+git clone https://github.com/parthpathakpp29/termicode.git
+cd termicode
+python -m venv .venv
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+pip install -e .[dev]
 ```
 
 ## ⚙️ Configuration
 
-TermiCode requires an OpenRouter API key to operate.
+TermiCode requires an OpenRouter API key to start.
 
-1. Get a free API key at [openrouter.ai/keys](https://openrouter.ai/keys).
-2. Create a `.env` file in the directory where you plan to run TermiCode, and add:
-   ```env
-   OPENROUTER_API_KEY=your_api_key_here
-   ```
-*(Alternatively, you can export `OPENROUTER_API_KEY` as a system environment variable in your terminal).*
+1. Create a .env file in the directory where you run the CLI.
+2. Add your key:
+
+```env
+OPENROUTER_API_KEY=your_api_key_here
+```
+
+You can also export the variable in your shell instead of using a .env file.
 
 ## 💻 Usage
 
-Navigate to any project directory in your terminal and simply type:
+Run the CLI from any project directory:
+
 ```bash
 termicode
 ```
 
-This starts the interactive AI shell. 
-Type `/help` to see available slash commands:
-- `/map` - Print the current project structure tree.
-- `/clear` - Clear the terminal screen.
-- `/reset` - Wipe the agent's short-term memory and start fresh.
-- `/exit` - Save session and exit.
+Once it starts, you can use commands such as:
 
-**Example Prompts:**
-- *"Refactor my calculate_tax function in utils.py to handle edge cases."*
-- *"Search the codebase for 'DATABASE_URL' and tell me where it's used."*
-- *"Run the pytest suite and fix any failing tests."*
+- /help - Show available commands
+- /map - Print the current project structure
+- /clear - Clear the terminal screen
+- /reset - Reset the current session context
+- /heal <file> - Diagnose and refactor a specific file
+- /undo <file> - Restore the most recent backup for a file
+- /report - Generate a repository health report
+- /ripple <prompt> - Apply a multi-file architecture change
+- /exit - Save the session and quit
 
-## 🛠️ Developer Setup (Local Building)
+Example prompts:
 
-If you want to contribute or build TermiCode locally from the source code:
+- Refactor a slow or brittle function in a Python module.
+- Search the repository for a symbol or configuration value.
+- Run the test suite and fix any failing tests.
 
-1. **Clone the repository**
-   ```bash
-   git clone https://github.com/yourusername/termicode.git
-   cd termicode
-   ```
+## 🧪 Development
 
-2. **Create a virtual environment**
-   ```bash
-   python -m venv .venv
-   source .venv/bin/activate  # On Windows: .venv\Scripts\activate
-   ```
+To run the test suite locally:
 
-3. **Install in editable mode with dev dependencies**
-   ```bash
-   pip install -e .[dev]
-   ```
-
-4. **Run the CLI locally**
-   ```bash
-   termicode
-   ```
+```bash
+pytest
+```
 
 ## 📄 License
-This project is licensed under the MIT License - see the LICENSE file for details.
+
+This project is licensed under the MIT License. If you want to use it commercially or in your own projects, you can review the terms here:
+
+- https://opensource.org/licenses/MIT
+
+If you want, I can also add a real LICENSE file to the repository so the license is included directly in the project.
