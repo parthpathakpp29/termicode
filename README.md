@@ -1,19 +1,26 @@
 # TermiCode
 
-TermiCode is an interactive terminal-based AI coding assistant built for local development workflows. It helps you inspect a repository, make safe code changes, and run lightweight automation tasks without leaving the terminal.
+TermiCode is a terminal-based AI coding assistant built for students, hackathon teams, and open-source contributors who want to work faster without leaving the command line.
 
-It uses OpenRouter-backed models, includes guardrails for sensitive files, supports surgical file edits, and offers a set of slash commands for repository exploration, refactoring, and session management.
+It helps you inspect a repository, make safe code changes, and run lightweight automation tasks directly from your terminal. It uses OpenRouter-backed models, includes guardrails for sensitive files, supports surgical file edits, and offers slash commands for repository exploration, refactoring, and session management.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
 
-## ✨ What it does
+## ✨ Why students and contributors use it
 
-- Works directly in your terminal with an interactive chat-style interface.
-- Reads the current project structure and helps you understand the codebase.
-- Performs targeted file edits instead of rewriting whole files.
+- Works directly in the terminal, which is ideal for developers already living in the command line.
+- Helps you understand unfamiliar codebases quickly during assignments, internships, or hackathons.
+- Makes small, focused code changes without rewriting entire files.
 - Protects sensitive paths such as .env and other guarded files.
 - Supports slash commands for mapping the repo, resetting context, generating reports, and triggering refactor workflows.
+
+## 🎯 Who it is for
+
+- College students working on coding assignments and personal projects
+- Hackathon teams who want a fast CLI-based assistant
+- Open-source contributors who want a lightweight tool for repository exploration
+- Developers who prefer terminal-first workflows over heavy IDE integrations
 
 ## 🚀 Installation
 
@@ -85,6 +92,36 @@ To run the test suite locally:
 ```bash
 pytest
 ```
+
+## 🤝 Contributing
+
+TermiCode is designed to be a community-driven project, and we welcome contributions from students and beginner developers.
+
+You do not need to be an expert to help. Good ways to start include:
+
+- fixing a small bug
+- improving the CLI experience
+- adding tests for an existing feature
+- improving documentation and setup instructions
+- adding a new slash command or small feature
+- helping with onboarding examples
+
+If you want to contribute:
+
+1. Fork the repository
+2. Create a new branch for your change
+3. Make a small, focused update
+4. Run the tests
+5. Open a pull request with a clear explanation
+
+Beginner-friendly ideas:
+
+- improve error messages
+- add a new example workflow
+- write documentation for a feature
+- suggest or implement a small quality-of-life improvement
+
+If you are unsure where to start, open an issue and say you would like to help. We will be happy to guide you.
 
 ## 📄 License
 
