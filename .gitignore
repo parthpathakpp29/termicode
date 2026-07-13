@@ -1,0 +1,15 @@
+.env
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.tmp/
+.venv/
+.vscode/
+.claude/
+.codex/
+.repowise/
+.mcp.json
+.termicode_history.json
+.termicode_memory.json
+.termicode_reports/
+.termicode_doctor_write_test
