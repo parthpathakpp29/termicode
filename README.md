@@ -125,6 +125,11 @@ Beginner-friendly ideas:
 
 If you are unsure where to start, open an issue and say you would like to help. We will be happy to guide you.
 
+## 📄 Screenshots
+<img width="925" height="549" alt="termi4" src="https://github.com/user-attachments/assets/699e326c-5a00-4c20-a722-654ac2f7893f" />
+<img width="1018" height="686" alt="termi5" src="https://github.com/user-attachments/assets/77a675bc-f6d1-450c-8a57-e84b4c9323e2" />
+<img width="974" height="345" alt="termi1" src="https://github.com/user-attachments/assets/d9708eac-a117-4b2c-bf3b-9f24b1ce2d04" />
+
 ## 📄 License
 
 This project is licensed under the MIT License. If you want to use it commercially or in your own projects, you can review the terms here:
