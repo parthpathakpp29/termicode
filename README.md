@@ -1,19 +1,21 @@
 # TermiCode
 
-TermiCode is a terminal-based AI coding assistant built for students, hackathon teams, and open-source contributors who want to work faster without leaving the command line.
+**Your terminal just got a brain.**
 
-It helps you inspect a repository, make safe code changes, and run lightweight automation tasks directly from your terminal. It uses OpenRouter-backed models, includes guardrails for sensitive files, supports surgical file edits, and offers slash commands for repository exploration, refactoring, and session management.
+TermiCode is a terminal-first AI coding assistant built for students, hackathon teams, and open-source contributors who want to move fast without ever leaving the command line.
+
+It helps you explore an unfamiliar repo in seconds, make safe, surgical edits instead of risky rewrites, and run lightweight automation — all through a simple command-line workflow. Guardrails protect sensitive files like `.env`, so automation never puts your secrets at risk. Powered by OpenRouter models, with slash commands for repo mapping, diagnosis, refactoring, and session management.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
 
 ## ✨ Why students and contributors use it
 
-- Works directly in the terminal, which is ideal for developers already living in the command line.
-- Helps you understand unfamiliar codebases quickly during assignments, internships, or hackathons.
-- Makes small, focused code changes without rewriting entire files.
-- Protects sensitive paths such as .env and other guarded files.
-- Supports slash commands for mapping the repo, resetting context, generating reports, and triggering refactor workflows.
+- **Terminal-first, always** — no IDE required, ideal for developers who already live in the command line.
+- **Quick repo exploration** — understand unfamiliar codebases in seconds during assignments, internships, or hackathons.
+- **Safe, surgical edits** — small, focused code changes instead of broad rewrites you have to double-check.
+- **Guardrails for sensitive files** — `.env` and other guarded paths are protected by default.
+- **Lightweight automation** — slash commands for mapping the repo, resetting context, generating reports, and triggering refactor workflows.
 
 ## 🎯 Who it is for
 
