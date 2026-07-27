@@ -107,6 +107,7 @@ Once it starts, you can use commands such as:
 - /undo <file> - Restore the most recent backup for a file
 - /report - Generate a repository health report (requires Repowise)
 - /guard on|off - Toggle the Git pre-commit interceptor (requires Repowise)
+- /approve on|off - Auto-approve file writes/edits/deletes for this session (run_command always prompts)
 - /ripple <prompt> - Apply a multi-file architecture change
 - /exit - Save the session and quit
 
