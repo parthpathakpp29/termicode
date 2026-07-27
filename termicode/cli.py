@@ -28,6 +28,8 @@ from termicode.ui import (
     make_response_panel,
     print_api_error,
     print_banner,
+    print_cancelled,
+    print_exit_hint,
     print_help,
     print_loop_detected,
     print_project_map,
@@ -52,6 +54,54 @@ TRUNCATED_TOOL_CALL_NOTICE = (
     "Do not retry the same call. Split the work into smaller pieces: write or edit "
     "one section at a time, using several 'edit_file' calls instead of one large one."
 )
+
+
+CANCELLED_TOOL_RESULT = "Action cancelled by the user before it finished."
+
+
+def _close_unanswered_tool_calls(messages: list) -> int:
+    """Answer any tool calls left dangling by an interrupted turn.
+
+    Every tool_call the model makes must be matched by a tool message, or the
+    next request is rejected. Cancelling mid-turn leaves that contract broken,
+    so the missing results are filled in as cancellations.
+
+    Results are appended rather than the turn being truncated: tools that ran
+    before the interrupt may already have changed files on disk, and dropping
+    that record would leave the model reasoning against a history that no
+    longer matches reality. Returns how many results were synthesised.
+    """
+    last_call_index = None
+    for index in range(len(messages) - 1, -1, -1):
+        message = messages[index]
+        if not isinstance(message, dict):
+            continue
+        if message.get("role") == "assistant" and message.get("tool_calls"):
+            last_call_index = index
+            break
+
+    if last_call_index is None:
+        return 0
+
+    answered = {
+        message.get("tool_call_id")
+        for message in messages[last_call_index + 1:]
+        if isinstance(message, dict) and message.get("role") == "tool"
+    }
+
+    synthesised = 0
+    for tool_call in messages[last_call_index]["tool_calls"]:
+        if tool_call["id"] in answered:
+            continue
+        messages.append({
+            "role": "tool",
+            "tool_call_id": tool_call["id"],
+            "name": tool_call["function"]["name"],
+            "content": CANCELLED_TOOL_RESULT,
+        })
+        synthesised += 1
+
+    return synthesised
 
 
 def _has_complete_arguments(tool_call_data: dict) -> bool:
@@ -156,8 +206,21 @@ def _stream_agent_response(client, current_model, messages, available_tools):
     usage_tokens = 0
     finish_reason = None
     live_panel = None
+    spinner = print_thinking_spinner()
+    spinner_running = False
+
+    def stop_spinner():
+        """Rich allows only one Live at a time, so this must run before any
+        response panel starts."""
+        nonlocal spinner_running
+        if spinner_running:
+            spinner.stop()
+            spinner_running = False
 
     try:
+        spinner.start()
+        spinner_running = True
+
         response_stream = client.chat.completions.create(
             model=current_model,
             messages=messages,
@@ -187,12 +250,14 @@ def _stream_agent_response(client, current_model, messages, available_tools):
 
             if delta.content:
                 if live_panel is None:
+                    stop_spinner()
                     live_panel = Live(console=console, refresh_per_second=15, transient=False)
                     live_panel.start()
                 accumulated_content += delta.content
                 live_panel.update(make_response_panel(accumulated_content))
 
             if delta.tool_calls:
+                stop_spinner()
                 for tool_call in delta.tool_calls:
                     if tool_call.id:
                         current_tool_id = tool_call.id
@@ -208,6 +273,7 @@ def _stream_agent_response(client, current_model, messages, available_tools):
                             accumulated_tool_calls[current_tool_id]["arguments"] += tool_call.function.arguments
 
     finally:
+        stop_spinner()
         if live_panel is not None:
             live_panel.stop()
 
@@ -241,9 +307,25 @@ def main():
         messages = [{"role": "system", "content": build_system_prompt(project_structure, conversation_summary, repowise_available)}]
         print_startup_info(rehydrated=False, history_file=history_path())
 
+    exit_armed = False
+
     while True:
         try:
-            user_input = console.input("[bold white]You[/] [dim cyan]>[/] ").strip()
+            try:
+                user_input = console.input("[bold white]You[/] [dim cyan]>[/] ").strip()
+            except KeyboardInterrupt:
+                # Ctrl+C at an idle prompt is ambiguous, so make leaving
+                # deliberate: it only exits when pressed twice in a row.
+                if exit_armed:
+                    raise
+                exit_armed = True
+                print_exit_hint()
+                continue
+            except EOFError:
+                console.print()
+                raise KeyboardInterrupt
+
+            exit_armed = False
 
             if not user_input:
                 continue
@@ -386,120 +468,126 @@ def main():
             iteration = 0
             recent_tool_calls = []
 
-            with print_thinking_spinner():
-                pass
+            try:
+                while iteration < max_iterations:
+                    iteration += 1
+                    if len(messages) > 25:
+                        console.print("  [bold magenta]*[/] [dim]Compressing older memories...[/]")
+                        split_idx = len(messages) - 12
 
-            while iteration < max_iterations:
-                iteration += 1
-                if len(messages) > 25:
-                    console.print("  [bold magenta]*[/] [dim]Compressing older memories...[/]")
-                    split_idx = len(messages) - 12
+                        while split_idx > 1:
+                            msg = messages[split_idx]
+                            role = msg.get("role") if isinstance(msg, dict) else getattr(msg, "role", None)
+                            if role == "tool":
+                                split_idx -= 1
+                            else:
+                                break
 
-                    while split_idx > 1:
-                        msg = messages[split_idx]
-                        role = msg.get("role") if isinstance(msg, dict) else getattr(msg, "role", None)
-                        if role == "tool":
-                            split_idx -= 1
-                        else:
-                            break
+                        dropped_history = messages[1:split_idx]
+                        conversation_summary = update_memory_summary(client, conversation_summary, dropped_history)
+                        save_memory_summary(conversation_summary)
+                        messages = [messages[0]] + messages[split_idx:]
 
-                    dropped_history = messages[1:split_idx]
-                    conversation_summary = update_memory_summary(client, conversation_summary, dropped_history)
-                    save_memory_summary(conversation_summary)
-                    messages = [messages[0]] + messages[split_idx:]
+                    pruned_messages = prune_context(messages)
 
-                pruned_messages = prune_context(messages)
+                    try:
+                        accumulated_content, accumulated_tool_calls, usage_tokens, finish_reason = _stream_agent_response(
+                            client,
+                            current_model,
+                            pruned_messages,
+                            available_tools,
+                        )
+                        session_tokens += usage_tokens
+                    except Exception as api_err:
+                        print_api_error(api_err)
+                        break
 
-                try:
-                    accumulated_content, accumulated_tool_calls, usage_tokens, finish_reason = _stream_agent_response(
-                        client,
-                        current_model,
-                        pruned_messages,
-                        available_tools,
-                    )
-                    session_tokens += usage_tokens
-                except Exception as api_err:
-                    print_api_error(api_err)
-                    break
+                    was_truncated = finish_reason == "length"
 
-                was_truncated = finish_reason == "length"
+                    if accumulated_tool_calls:
+                        message_dict = {
+                            "role": "assistant",
+                            "content": accumulated_content,
+                            "tool_calls": [],
+                        }
+                        for tool_id, tool_data in accumulated_tool_calls.items():
+                            message_dict["tool_calls"].append({
+                                "id": tool_data["id"],
+                                "type": "function",
+                                "function": {
+                                    "name": tool_data["name"],
+                                    "arguments": tool_data["arguments"],
+                                },
+                            })
+                        messages.append(message_dict)
 
-                if accumulated_tool_calls:
-                    message_dict = {
-                        "role": "assistant",
-                        "content": accumulated_content,
-                        "tool_calls": [],
-                    }
-                    for tool_id, tool_data in accumulated_tool_calls.items():
-                        message_dict["tool_calls"].append({
-                            "id": tool_data["id"],
-                            "type": "function",
-                            "function": {
-                                "name": tool_data["name"],
-                                "arguments": tool_data["arguments"],
-                            },
-                        })
-                    messages.append(message_dict)
+                        console.print()
+                        for tool_call_data in message_dict["tool_calls"]:
+                            # Only the last call in a truncated turn can be incomplete,
+                            # and only if its arguments no longer parse. Earlier calls
+                            # arrived in full and still run.
+                            if (
+                                was_truncated
+                                and tool_call_data is message_dict["tool_calls"][-1]
+                                and not _has_complete_arguments(tool_call_data)
+                            ):
+                                print_warning(
+                                    f"[bold]{tool_call_data['function']['name']}[/] was cut off at the "
+                                    f"{MAX_COMPLETION_TOKENS:,}-token limit and was not executed. "
+                                    "Asking the model to split the work."
+                                )
+                                messages.append({
+                                    "role": "tool",
+                                    "tool_call_id": tool_call_data["id"],
+                                    "name": tool_call_data["function"]["name"],
+                                    "content": TRUNCATED_TOOL_CALL_NOTICE,
+                                })
+                                continue
+
+                            mock_tool_call = MockToolCall(tool_call_data)
+                            call_signature = f"{tool_call_data['function']['name']}:{tool_call_data['function']['arguments']}"
+
+                            if call_signature in recent_tool_calls:
+                                print_loop_detected(tool_call_data["function"]["name"])
+                                messages.append({
+                                    "role": "tool",
+                                    "tool_call_id": tool_call_data["id"],
+                                    "name": tool_call_data["function"]["name"],
+                                    "content": "SYSTEM GUARD ERROR: Duplicate tool call detected. Stop repeating. Provide your final answer to the user now.",
+                                })
+                                continue
+
+                            recent_tool_calls.append(call_signature)
+                            if len(recent_tool_calls) > 5:
+                                recent_tool_calls.pop(0)
+
+                            result = execute_tool(mock_tool_call)
+                            result_str = str(result)
+                            max_llm_length = 8000
+                            if len(result_str) > max_llm_length:
+                                result_str = result_str[:max_llm_length] + "\n\n... [SYSTEM WARNING: CONTENT TRUNCATED DUE TO CONTEXT LIMITS]"
+                            messages.append({
+                                "role": "tool",
+                                "tool_call_id": tool_call_data["id"],
+                                "name": tool_call_data["function"]["name"],
+                                "content": result_str,
+                            })
+                        continue
 
                     console.print()
-                    for tool_call_data in message_dict["tool_calls"]:
-                        # Only the last call in a truncated turn can be incomplete,
-                        # and only if its arguments no longer parse. Earlier calls
-                        # arrived in full and still run.
-                        if (
-                            was_truncated
-                            and tool_call_data is message_dict["tool_calls"][-1]
-                            and not _has_complete_arguments(tool_call_data)
-                        ):
-                            print_warning(
-                                f"[bold]{tool_call_data['function']['name']}[/] was cut off at the "
-                                f"{MAX_COMPLETION_TOKENS:,}-token limit and was not executed. "
-                                "Asking the model to split the work."
-                            )
-                            messages.append({
-                                "role": "tool",
-                                "tool_call_id": tool_call_data["id"],
-                                "name": tool_call_data["function"]["name"],
-                                "content": TRUNCATED_TOOL_CALL_NOTICE,
-                            })
-                            continue
+                    if was_truncated:
+                        print_truncation_warning(MAX_COMPLETION_TOKENS)
+                    messages.append({"role": "assistant", "content": accumulated_content})
+                    save_session(messages, conversation_summary)
+                    break
 
-                        mock_tool_call = MockToolCall(tool_call_data)
-                        call_signature = f"{tool_call_data['function']['name']}:{tool_call_data['function']['arguments']}"
-
-                        if call_signature in recent_tool_calls:
-                            print_loop_detected(tool_call_data["function"]["name"])
-                            messages.append({
-                                "role": "tool",
-                                "tool_call_id": tool_call_data["id"],
-                                "name": tool_call_data["function"]["name"],
-                                "content": "SYSTEM GUARD ERROR: Duplicate tool call detected. Stop repeating. Provide your final answer to the user now.",
-                            })
-                            continue
-
-                        recent_tool_calls.append(call_signature)
-                        if len(recent_tool_calls) > 5:
-                            recent_tool_calls.pop(0)
-
-                        result = execute_tool(mock_tool_call)
-                        result_str = str(result)
-                        max_llm_length = 8000
-                        if len(result_str) > max_llm_length:
-                            result_str = result_str[:max_llm_length] + "\n\n... [SYSTEM WARNING: CONTENT TRUNCATED DUE TO CONTEXT LIMITS]"
-                        messages.append({
-                            "role": "tool",
-                            "tool_call_id": tool_call_data["id"],
-                            "name": tool_call_data["function"]["name"],
-                            "content": result_str,
-                        })
-                    continue
-
-                console.print()
-                if was_truncated:
-                    print_truncation_warning(MAX_COMPLETION_TOKENS)
-                messages.append({"role": "assistant", "content": accumulated_content})
+            except KeyboardInterrupt:
+                # Repair before anything else: an unanswered tool call makes
+                # every later request invalid, so the session would be dead.
+                pending = _close_unanswered_tool_calls(messages)
                 save_session(messages, conversation_summary)
-                break
+                print_cancelled(pending)
+                continue
 
             if iteration >= max_iterations:
                 print_warning(f"Max iterations ({max_iterations}) reached. Pausing to prevent infinite loops and token drain.")

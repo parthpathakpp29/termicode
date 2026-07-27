@@ -168,6 +168,20 @@ def print_warning(msg: str):
     console.print(f"  [bold orange3]![/]  {msg}")
 
 
+def print_cancelled(pending_actions: int = 0):
+    """Confirms an interrupted turn was stopped and the prompt is back."""
+    detail = ""
+    if pending_actions:
+        noun = "action" if pending_actions == 1 else "actions"
+        detail = f" [dim]{pending_actions} pending {noun} marked cancelled.[/]"
+    console.print(f"\n  [bold orange3]![/]  [orange3]Cancelled.[/]{detail}")
+
+
+def print_exit_hint():
+    """Nudges the user toward a deliberate exit after a single Ctrl+C."""
+    console.print("\n  [dim]Press Ctrl+C again to exit, or type[/] [cyan]/exit[/][dim].[/]")
+
+
 def print_truncation_warning(limit: int):
     """Tells the user the answer above was cut off at the output limit."""
     console.print(
