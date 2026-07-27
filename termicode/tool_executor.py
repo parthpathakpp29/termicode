@@ -2,6 +2,7 @@ import json
 import os
 
 from termicode import tools
+from termicode.diff import build_delete_preview, build_edit_preview, build_write_preview
 from termicode.ui import (
     print_backup_notice,
     print_command_alert,
@@ -54,14 +55,17 @@ def execute_tool(tool_call) -> str:
         if isinstance(content, list):
             content = "\n".join(content)
 
-        if print_security_alert("Write / Overwrite File", file_path):
-            if tools._is_protected(file_path):
-                result = f"Error: Access to '{os.path.basename(file_path)}' is permanently restricted for security reasons."
-            else:
-                result = tools.write_file_approved(file_path, content)
-                if "Snapshot:" in result:
-                    backup_path = result.split("Snapshot:", 1)[1].strip()
-                    print_backup_notice(backup_path)
+        # Refused before prompting: approving would render the current contents
+        # of a protected file into the preview below.
+        if tools._is_protected(file_path):
+            result = f"Error: Access to '{os.path.basename(file_path)}' is permanently restricted for security reasons."
+        elif print_security_alert(
+            "Write / Overwrite File", file_path, build_write_preview(file_path, content)
+        ):
+            result = tools.write_file_approved(file_path, content)
+            if "Snapshot:" in result:
+                backup_path = result.split("Snapshot:", 1)[1].strip()
+                print_backup_notice(backup_path)
         else:
             result = f"Action blocked: User denied permission to write '{file_path}'."
 
@@ -77,7 +81,11 @@ def execute_tool(tool_call) -> str:
 
         if not search_string:
             result = "Error: search_string cannot be empty."
-        elif print_security_alert("Surgical File Edit", file_path):
+        elif tools._is_protected(file_path):
+            result = f"Error: Access to '{os.path.basename(file_path)}' is permanently restricted for security reasons."
+        elif print_security_alert(
+            "Surgical File Edit", file_path, build_edit_preview(file_path, search_string, replace_string)
+        ):
             result = tools.edit_file_approved(file_path, search_string, replace_string)
         else:
             result = "Action blocked: User denied permission to edit the file."
@@ -97,12 +105,11 @@ def execute_tool(tool_call) -> str:
         result = tools.create_directory(args.get("directory_path"))
     elif name == "delete_file":
         file_path = args.get("file_path")
-        if print_security_alert("Delete File", file_path):
+        if tools._is_protected(file_path):
+            result = f"Error: Access to '{os.path.basename(file_path)}' is permanently restricted."
+        elif print_security_alert("Delete File", file_path, build_delete_preview(file_path)):
             try:
-                if tools._is_protected(file_path):
-                    result = f"Error: Access to '{os.path.basename(file_path)}' is permanently restricted."
-                else:
-                    result = tools.delete_file_approved(file_path)
+                result = tools.delete_file_approved(file_path)
             except Exception as e:
                 result = str(e)
         else:

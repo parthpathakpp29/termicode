@@ -211,8 +211,12 @@ def print_api_error(err):
     ))
 
 
-def print_security_alert(action: str, file_path: str) -> bool:
-    """Renders a security confirmation prompt and returns bool approval."""
+def print_security_alert(action: str, file_path: str, preview: str = None) -> bool:
+    """Renders a security confirmation prompt and returns bool approval.
+
+    `preview` describes what the operation would actually do, so the user is
+    approving a visible change rather than a file path.
+    """
     console.print(Panel(
         f"[bold white]{action}[/]\n[dim]File:[/] [cyan]{file_path}[/]",
         title="[bold red]Security Alert[/]",
@@ -220,6 +224,16 @@ def print_security_alert(action: str, file_path: str) -> bool:
         box=box.HEAVY,
         padding=(0, 2),
     ))
+
+    if preview:
+        console.print(Panel(
+            Syntax(preview, "diff", theme="ansi_dark", word_wrap=True, background_color="default"),
+            title="[bold]Proposed change[/]",
+            border_style="dim white",
+            box=box.ROUNDED,
+            padding=(0, 1),
+        ))
+
     answer = console.input("  [bold]Allow? ([green]y[/]/[red]N[/]):[/] ").strip().lower()
     return answer == "y"
 
