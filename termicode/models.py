@@ -30,6 +30,29 @@ OPENROUTER_MODEL_STATS = {
 }
 
 
+FREE_TIERS = ("free_coding", "free_general", "free_small")
+
+
+def next_fallback_model(tried: set, model_stats: dict, preferred_tier: str = None):
+    """Pick an untried free-tier model to retry with after a rate limit.
+
+    Only considers free tiers: falling back to a paid "premium" model without
+    the user's consent is not something a free-tier-focused tool should do
+    silently. Prefers staying within the tier that just got rate limited
+    before trying a different one. Returns None once every free model has
+    been tried, which is what bounds the fallback chain — there is no fixed
+    attempt count, since the chain is exactly as long as the free-tier roster.
+    """
+    candidates = [m for m, stats in model_stats.items() if stats.get("tier") in FREE_TIERS and m not in tried]
+
+    if preferred_tier:
+        same_tier = [m for m in candidates if model_stats[m]["tier"] == preferred_tier]
+        if same_tier:
+            return same_tier[0]
+
+    return candidates[0] if candidates else None
+
+
 def get_token_usage(tokens: int, model: str) -> tuple:
     """Returns (tokens_used, estimated_cost)."""
     stats = OPENROUTER_MODEL_STATS.get(model, {"cost_per_m": 0.50})

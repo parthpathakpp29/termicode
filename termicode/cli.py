@@ -3,11 +3,12 @@ import os
 import shutil
 
 from dotenv import load_dotenv
+from openai import RateLimitError
 from rich.live import Live
 
 from termicode import repowise, tools
 from termicode.doctor import format_doctor_summary, run_doctor
-from termicode.models import OPENROUTER_MODEL_STATS, get_token_usage, route_model
+from termicode.models import OPENROUTER_MODEL_STATS, get_token_usage, next_fallback_model, route_model
 from termicode.project import generate_local_project_map
 from termicode.prompts import build_system_prompt, get_available_tools
 from termicode.report import generate_repo_report
@@ -36,6 +37,8 @@ from termicode.ui import (
     print_project_map,
     print_startup_info,
     print_success,
+    print_rate_limit_exhausted,
+    print_rate_limit_fallback,
     print_thinking_spinner,
     print_tool_list,
     print_truncation_warning,
@@ -293,6 +296,46 @@ def _stream_agent_response(client, current_model, messages, available_tools):
     return accumulated_content, accumulated_tool_calls, usage_tokens, finish_reason
 
 
+def _stream_with_fallback(client, current_model, messages, available_tools, user_manually_selected):
+    """Calls _stream_agent_response, retrying with a different free model on a 429.
+
+    Only openai.RateLimitError triggers a retry; every other failure surfaces
+    exactly as _stream_agent_response raised it. The chain length is not fixed
+    — it continues until next_fallback_model has no untried free model left to
+    offer, which is what naturally bounds it, since a model is never tried twice.
+
+    Bypassed entirely when the user picked the model manually: silently
+    downgrading an explicit choice is not this feature's job.
+
+    Returns the same 4-tuple as _stream_agent_response, plus the model that
+    actually produced it — current_model in the caller should be updated to
+    it, so the session does not immediately re-hit the same limited model.
+    """
+    if user_manually_selected:
+        content, tool_calls, usage_tokens, finish_reason = _stream_agent_response(
+            client, current_model, messages, available_tools
+        )
+        return content, tool_calls, usage_tokens, finish_reason, current_model
+
+    tried = set()
+    model_to_try = current_model
+
+    while True:
+        tried.add(model_to_try)
+        try:
+            content, tool_calls, usage_tokens, finish_reason = _stream_agent_response(
+                client, model_to_try, messages, available_tools
+            )
+            return content, tool_calls, usage_tokens, finish_reason, model_to_try
+        except RateLimitError:
+            preferred_tier = OPENROUTER_MODEL_STATS.get(model_to_try, {}).get("tier")
+            fallback = next_fallback_model(tried, OPENROUTER_MODEL_STATS, preferred_tier)
+            if fallback is None:
+                raise
+            print_rate_limit_fallback(model_to_try, fallback)
+            model_to_try = fallback
+
+
 def main():
     load_dotenv()
     print_banner()
@@ -514,13 +557,18 @@ def main():
                     pruned_messages = prune_context(messages)
 
                     try:
-                        accumulated_content, accumulated_tool_calls, usage_tokens, finish_reason = _stream_agent_response(
+                        accumulated_content, accumulated_tool_calls, usage_tokens, finish_reason, current_model = _stream_with_fallback(
                             client,
                             current_model,
                             pruned_messages,
                             available_tools,
+                            user_manually_selected_model,
                         )
                         session_tokens += usage_tokens
+                    except RateLimitError as rate_limit_err:
+                        print_rate_limit_exhausted()
+                        print_api_error(rate_limit_err)
+                        break
                     except Exception as api_err:
                         print_api_error(api_err)
                         break

@@ -191,6 +191,19 @@ def print_truncation_warning(limit: int):
     )
 
 
+def print_rate_limit_fallback(from_model: str, to_model: str):
+    """Announces an automatic model switch after a 429 on the previous model."""
+    console.print(f"  [bold orange3]![/]  [orange3]Rate limited on[/] [cyan]{from_model}[/] [orange3]— retrying with[/] [cyan]{to_model}[/] [dim](free)[/]")
+
+
+def print_rate_limit_exhausted():
+    """Every free model in the fallback chain was rate limited."""
+    console.print(
+        "  [bold orange3]![/]  [orange3]Every free model was rate limited.[/] "
+        "[dim]Try again shortly, or run[/] [cyan]/model <name>[/] [dim]to pick one manually.[/]"
+    )
+
+
 def print_error(msg: str):
     console.print("\n  [bold red]x[/]  ", end="")
     console.print(msg, markup=False)
