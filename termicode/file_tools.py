@@ -84,7 +84,9 @@ def write_file_approved(file_path: str, content: str) -> str:
 
         backup_path = None
         if os.path.exists(validated_path):
-            timestamp = int(time.time())
+            # Nanosecond resolution: a second-granularity timestamp let two
+            # backup-creating calls on the same file collide on filename.
+            timestamp = time.time_ns()
             backup_path = f"{validated_path}.{timestamp}.bak"
             with open(backup_path, "w", encoding="utf-8") as f:
                 with open(validated_path, "r", encoding="utf-8") as original:
@@ -122,7 +124,7 @@ def edit_file_approved(file_path: str, search_string: str, replace_string: str) 
         if search_string not in content:
             return "Error: The exact 'search_string' was not found in the file. Ensure you are matching indentation and line breaks perfectly."
 
-        timestamp = int(time.time())
+        timestamp = time.time_ns()
         backup_path = f"{validated_path}.{timestamp}.bak"
         with open(backup_path, "w", encoding="utf-8") as backup:
             backup.write(content)
@@ -186,7 +188,7 @@ def delete_file_approved(file_path: str) -> str:
         if not os.path.exists(validated_path):
             return f"Error: '{file_path}' does not exist."
 
-        timestamp = int(time.time())
+        timestamp = time.time_ns()
         backup_path = f"{validated_path}.{timestamp}.bak"
         os.rename(validated_path, backup_path)
 
