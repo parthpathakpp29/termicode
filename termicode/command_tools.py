@@ -1,6 +1,12 @@
 import subprocess
 
 
+# A single "pip install <one package>" measured at 41s on an ordinary machine
+# in this project's own testing -- 30s left routine installs and test suites,
+# exactly what this tool exists to run, timing out before they could finish.
+COMMAND_TIMEOUT_SECONDS = 180
+
+
 def run_command_approved(command: str) -> str:
     """Executes a shell command. Caller must obtain user approval first."""
     try:
@@ -9,7 +15,7 @@ def run_command_approved(command: str) -> str:
             shell=True,
             text=True,
             capture_output=True,
-            timeout=30,
+            timeout=COMMAND_TIMEOUT_SECONDS,
         )
 
         output = ""
@@ -24,6 +30,6 @@ def run_command_approved(command: str) -> str:
         return output
 
     except subprocess.TimeoutExpired:
-        return "Error: The command took too long to execute and timed out (30-second limit)."
+        return f"Error: The command took too long to execute and timed out ({COMMAND_TIMEOUT_SECONDS}-second limit)."
     except OSError as e:
         return f"Error executing command: {e}"

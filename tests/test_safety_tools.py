@@ -2,7 +2,7 @@ import subprocess
 
 import pytest
 
-from termicode import tools
+from termicode import command_tools, tools
 from termicode.command_tools import run_command_approved
 from termicode.path_safety import _is_protected, validate_path
 
@@ -57,11 +57,31 @@ def test_search_codebase_respects_gitignore(tmp_path, monkeypatch):
 
 def test_run_command_timeout_message(monkeypatch):
     def fake_run(*args, **kwargs):
-        raise subprocess.TimeoutExpired(cmd="slow", timeout=30)
+        raise subprocess.TimeoutExpired(cmd="slow", timeout=command_tools.COMMAND_TIMEOUT_SECONDS)
 
     monkeypatch.setattr("termicode.command_tools.subprocess.run", fake_run)
 
-    assert "timed out" in run_command_approved("slow command")
+    result = run_command_approved("slow command")
+
+    assert "timed out" in result
+    # The message must reflect the real constant, not a hardcoded number that
+    # could silently go stale if the timeout value ever changes again.
+    assert str(command_tools.COMMAND_TIMEOUT_SECONDS) in result
+
+
+def test_run_command_passes_the_named_timeout_to_subprocess(monkeypatch):
+    captured = {}
+
+    def fake_run(*args, **kwargs):
+        captured["timeout"] = kwargs.get("timeout")
+        return subprocess.CompletedProcess(args=args, returncode=0, stdout="ok", stderr="")
+
+    monkeypatch.setattr("termicode.command_tools.subprocess.run", fake_run)
+
+    run_command_approved("echo ok")
+
+    assert captured["timeout"] == command_tools.COMMAND_TIMEOUT_SECONDS
+    assert command_tools.COMMAND_TIMEOUT_SECONDS > 30
 
 
 def test_edit_then_delete_the_same_file_does_not_collide_on_backup_name(tmp_path, monkeypatch):
