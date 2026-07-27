@@ -49,15 +49,21 @@ def _is_protected(path: str) -> bool:
 
 
 def validate_path(requested_path: str) -> str:
-    """Validate that requested_path resolves inside the current working directory."""
-    cwd = os.path.abspath(os.getcwd())
-    abs_path = os.path.abspath(requested_path)
+    """Validate that requested_path resolves inside the current working directory.
+
+    Uses realpath, not abspath, on both sides: abspath does not resolve
+    symlinks or Windows junctions, so a reparse point inside the workspace
+    pointing outward would pass an abspath-based containment check while
+    genuinely reading and writing files outside the sandbox.
+    """
+    cwd = os.path.realpath(os.getcwd())
+    real_path = os.path.realpath(requested_path)
 
     try:
-        common = os.path.commonpath([cwd, abs_path])
+        common = os.path.commonpath([cwd, real_path])
         if common != cwd:
-            raise PermissionError(f"Access denied: Path '{abs_path}' is outside the workspace '{cwd}'.")
+            raise PermissionError(f"Access denied: Path '{real_path}' is outside the workspace '{cwd}'.")
     except ValueError:
-        raise PermissionError(f"Access denied: Path '{abs_path}' has no common path with workspace '{cwd}'.")
+        raise PermissionError(f"Access denied: Path '{real_path}' has no common path with workspace '{cwd}'.")
 
-    return abs_path
+    return real_path
