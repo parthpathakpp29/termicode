@@ -1,3 +1,4 @@
+import json
 import os
 
 from dotenv import load_dotenv
@@ -33,6 +34,7 @@ from termicode.ui import (
     print_success,
     print_thinking_spinner,
     print_tool_list,
+    print_truncation_warning,
     print_warning,
     print_error,
 )
@@ -46,6 +48,37 @@ def _require_repowise(feature: str, repowise_available: bool) -> bool:
     print_warning(f"{feature} requires Repowise, which is not installed.")
     console.print(f"  [dim]Enable it with:[/] [cyan]{repowise.INSTALL_HINT}[/]")
     return False
+
+
+# Ceiling on a single model response. Large enough to write a real file in one
+# turn; low enough that every model in OPENROUTER_MODEL_STATS, including the
+# small free ones, accepts it. Per-model ceilings would belong in models.py.
+MAX_COMPLETION_TOKENS = 4096
+
+TRUNCATED_TOOL_CALL_NOTICE = (
+    "SYSTEM ERROR: Your tool call was cut off because it exceeded the output limit "
+    f"of {MAX_COMPLETION_TOKENS} tokens, so its arguments were incomplete and it was not executed. "
+    "Do not retry the same call. Split the work into smaller pieces: write or edit "
+    "one section at a time, using several 'edit_file' calls instead of one large one."
+)
+
+
+def _has_complete_arguments(tool_call_data: dict) -> bool:
+    """True when a streamed tool call's arguments survived as parseable JSON.
+
+    A response cut off at the token limit leaves the final call's JSON unclosed,
+    which is what distinguishes a genuinely truncated call from one that merely
+    happened to finish on the limit.
+    """
+    arguments = tool_call_data["function"]["arguments"]
+    if not arguments:
+        return True
+
+    try:
+        json.loads(arguments)
+        return True
+    except (json.JSONDecodeError, TypeError):
+        return False
 
 
 def _require_repowise(feature: str, repowise_available: bool) -> bool:
@@ -120,10 +153,17 @@ def _remove_guard_hook() -> None:
 
 
 def _stream_agent_response(client, current_model, messages, available_tools):
+    """Stream one model turn.
+
+    Returns (content, tool_calls, usage_tokens, finish_reason). The finish
+    reason is what tells the caller the response was cut off at the output
+    limit rather than completed.
+    """
     accumulated_content = ""
     accumulated_tool_calls = {}
     current_tool_id = None
     usage_tokens = 0
+    finish_reason = None
     live_panel = None
 
     try:
@@ -133,7 +173,7 @@ def _stream_agent_response(client, current_model, messages, available_tools):
             tools=available_tools,
             tool_choice="auto",
             temperature=0.2,
-            max_tokens=1000,
+            max_tokens=MAX_COMPLETION_TOKENS,
             stream=True,
             stream_options={"include_usage": True},
         )
@@ -143,7 +183,16 @@ def _stream_agent_response(client, current_model, messages, available_tools):
             if usage and getattr(usage, "total_tokens", None):
                 usage_tokens += usage.total_tokens
 
-            delta = chunk.choices[0].delta
+            # The final usage chunk carries no choices; skip it rather than
+            # letting the index below raise and discard the whole response.
+            if not chunk.choices:
+                continue
+
+            choice = chunk.choices[0]
+            if getattr(choice, "finish_reason", None):
+                finish_reason = choice.finish_reason
+
+            delta = choice.delta
 
             if delta.content:
                 if live_panel is None:
@@ -171,7 +220,7 @@ def _stream_agent_response(client, current_model, messages, available_tools):
         if live_panel is not None:
             live_panel.stop()
 
-    return accumulated_content, accumulated_tool_calls, usage_tokens
+    return accumulated_content, accumulated_tool_calls, usage_tokens, finish_reason
 
 
 def main():
@@ -366,7 +415,7 @@ def main():
                 pruned_messages = prune_context(messages)
 
                 try:
-                    accumulated_content, accumulated_tool_calls, usage_tokens = _stream_agent_response(
+                    accumulated_content, accumulated_tool_calls, usage_tokens, finish_reason = _stream_agent_response(
                         client,
                         current_model,
                         pruned_messages,
@@ -376,6 +425,8 @@ def main():
                 except Exception as api_err:
                     print_api_error(api_err)
                     break
+
+                was_truncated = finish_reason == "length"
 
                 if accumulated_tool_calls:
                     message_dict = {
@@ -396,6 +447,27 @@ def main():
 
                     console.print()
                     for tool_call_data in message_dict["tool_calls"]:
+                        # Only the last call in a truncated turn can be incomplete,
+                        # and only if its arguments no longer parse. Earlier calls
+                        # arrived in full and still run.
+                        if (
+                            was_truncated
+                            and tool_call_data is message_dict["tool_calls"][-1]
+                            and not _has_complete_arguments(tool_call_data)
+                        ):
+                            print_warning(
+                                f"[bold]{tool_call_data['function']['name']}[/] was cut off at the "
+                                f"{MAX_COMPLETION_TOKENS:,}-token limit and was not executed. "
+                                "Asking the model to split the work."
+                            )
+                            messages.append({
+                                "role": "tool",
+                                "tool_call_id": tool_call_data["id"],
+                                "name": tool_call_data["function"]["name"],
+                                "content": TRUNCATED_TOOL_CALL_NOTICE,
+                            })
+                            continue
+
                         mock_tool_call = MockToolCall(tool_call_data)
                         call_signature = f"{tool_call_data['function']['name']}:{tool_call_data['function']['arguments']}"
 
@@ -427,6 +499,8 @@ def main():
                     continue
 
                 console.print()
+                if was_truncated:
+                    print_truncation_warning(MAX_COMPLETION_TOKENS)
                 messages.append({"role": "assistant", "content": accumulated_content})
                 save_session(messages, conversation_summary)
                 break

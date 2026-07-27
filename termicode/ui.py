@@ -168,6 +168,14 @@ def print_warning(msg: str):
     console.print(f"  [bold orange3]![/]  {msg}")
 
 
+def print_truncation_warning(limit: int):
+    """Tells the user the answer above was cut off at the output limit."""
+    console.print(
+        f"  [bold orange3]![/]  [orange3]Response truncated[/] [dim]at the {limit:,}-token output limit. "
+        "Ask for the rest, or request a smaller piece at a time.[/]"
+    )
+
+
 def print_error(msg: str):
     console.print("\n  [bold red]x[/]  ", end="")
     console.print(msg, markup=False)
