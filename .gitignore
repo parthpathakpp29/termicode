@@ -13,3 +13,6 @@ __pycache__/
 .termicode_memory.json
 .termicode_reports/
 .termicode_doctor_write_test
+dist/
+build/
+*.egg-info/
