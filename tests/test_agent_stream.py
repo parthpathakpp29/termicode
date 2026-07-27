@@ -14,9 +14,12 @@ def _chunk(delta=None, finish_reason=None, usage=None, choices=None):
     return SimpleNamespace(choices=choices, usage=usage)
 
 
-def _tool_delta(call_id=None, name=None, arguments=None):
+def _tool_delta(call_id=None, name=None, arguments=None, index=0):
+    """index defaults to 0: every real provider tags each tool-call delta
+    with its parallel-call index, present on every chunk including
+    continuations that omit id/name."""
     function = SimpleNamespace(name=name, arguments=arguments)
-    return [SimpleNamespace(id=call_id, function=function)]
+    return [SimpleNamespace(index=index, id=call_id, function=function)]
 
 
 class FakeClient:

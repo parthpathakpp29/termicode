@@ -217,8 +217,7 @@ def _stream_agent_response(client, current_model, messages, available_tools):
     limit rather than completed.
     """
     accumulated_content = ""
-    accumulated_tool_calls = {}
-    current_tool_id = None
+    tool_calls_by_index = {}
     usage_tokens = 0
     finish_reason = None
     live_panel = None
@@ -275,23 +274,31 @@ def _stream_agent_response(client, current_model, messages, available_tools):
             if delta.tool_calls:
                 stop_spinner()
                 for tool_call in delta.tool_calls:
+                    # Tracked by index, not id: once a parallel tool call's
+                    # first chunk introduces its id, every later continuation
+                    # chunk for it omits id/name entirely and carries only
+                    # index plus an argument fragment. Keying on "whichever
+                    # id was seen most recently" corrupted interleaved
+                    # parallel tool calls -- a later fragment for call 0
+                    # would land on call 1's entry once call 1's id had been
+                    # seen more recently than call 0's.
+                    slot = tool_calls_by_index.setdefault(
+                        tool_call.index, {"id": None, "name": None, "arguments": ""}
+                    )
                     if tool_call.id:
-                        current_tool_id = tool_call.id
-                        accumulated_tool_calls[current_tool_id] = {
-                            "id": current_tool_id,
-                            "name": None,
-                            "arguments": "",
-                        }
-                    if tool_call.function and current_tool_id:
+                        slot["id"] = tool_call.id
+                    if tool_call.function:
                         if tool_call.function.name:
-                            accumulated_tool_calls[current_tool_id]["name"] = tool_call.function.name
+                            slot["name"] = tool_call.function.name
                         if tool_call.function.arguments:
-                            accumulated_tool_calls[current_tool_id]["arguments"] += tool_call.function.arguments
+                            slot["arguments"] += tool_call.function.arguments
 
     finally:
         stop_spinner()
         if live_panel is not None:
             live_panel.stop()
+
+    accumulated_tool_calls = {slot["id"]: slot for slot in tool_calls_by_index.values() if slot["id"]}
 
     return accumulated_content, accumulated_tool_calls, usage_tokens, finish_reason
 
