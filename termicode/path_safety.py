@@ -30,6 +30,12 @@ def _is_protected(path: str) -> bool:
     basename = os.path.basename(path)
     lower = basename.lower()
 
+    # Session state lives under ~/.termicode, normally outside the workspace and
+    # therefore already unreachable. This covers the case where the workspace is
+    # the home directory itself.
+    if ".termicode" in path.replace("\\", "/").lower().split("/"):
+        return True
+
     if basename in PROTECTED_FILES or lower in PROTECTED_BASENAMES:
         return True
     if lower.startswith(".env"):

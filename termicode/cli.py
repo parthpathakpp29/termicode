@@ -11,10 +11,11 @@ from termicode.project import generate_local_project_map
 from termicode.prompts import build_system_prompt, get_available_tools
 from termicode.report import generate_repo_report
 from termicode.session import (
-    HISTORY_FILE,
-    MEMORY_FILE,
+    history_path,
     load_chat_history,
     load_memory_summary,
+    memory_path,
+    migrate_legacy_session,
     prune_context,
     save_memory_summary,
     save_session,
@@ -38,16 +39,6 @@ from termicode.ui import (
     print_warning,
     print_error,
 )
-
-
-def _require_repowise(feature: str, repowise_available: bool) -> bool:
-    """Guard a Repowise-backed command, explaining how to enable it if missing."""
-    if repowise_available:
-        return True
-
-    print_warning(f"{feature} requires Repowise, which is not installed.")
-    console.print(f"  [dim]Enable it with:[/] [cyan]{repowise.INSTALL_HINT}[/]")
-    return False
 
 
 # Ceiling on a single model response. Large enough to write a real file in one
@@ -233,6 +224,11 @@ def main():
     current_model = "qwen/qwen3-coder"
     user_manually_selected_model = False
     session_tokens = 0
+
+    migrated_to = migrate_legacy_session()
+    if migrated_to:
+        print_success(f"Moved this project's session files out of the repo, into {migrated_to}")
+
     conversation_summary = load_memory_summary()
     project_structure = generate_local_project_map()
 
@@ -240,10 +236,10 @@ def main():
     if history:
         messages = history
         messages[0]["content"] = build_system_prompt(project_structure, conversation_summary, repowise_available)
-        print_startup_info(rehydrated=True, history_file=HISTORY_FILE)
+        print_startup_info(rehydrated=True, history_file=history_path())
     else:
         messages = [{"role": "system", "content": build_system_prompt(project_structure, conversation_summary, repowise_available)}]
-        print_startup_info(rehydrated=False, history_file=HISTORY_FILE)
+        print_startup_info(rehydrated=False, history_file=history_path())
 
     while True:
         try:
@@ -298,10 +294,10 @@ def main():
                 elif cmd == "/tools":
                     print_tool_list(available_tools)
                 elif cmd == "/reset":
-                    if os.path.exists(HISTORY_FILE):
-                        os.remove(HISTORY_FILE)
-                    if os.path.exists(MEMORY_FILE):
-                        os.remove(MEMORY_FILE)
+                    if os.path.exists(history_path()):
+                        os.remove(history_path())
+                    if os.path.exists(memory_path()):
+                        os.remove(memory_path())
                     conversation_summary = ""
                     project_structure = generate_local_project_map()
                     messages = [{"role": "system", "content": build_system_prompt(project_structure, "", repowise_available)}]
