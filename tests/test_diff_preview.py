@@ -166,12 +166,12 @@ def test_long_previews_are_capped(tmp_path, monkeypatch):
 
 @pytest.mark.parametrize(
     "answer,expected",
-    [("y", True), ("Y", True), ("n", False), ("", False)],
+    [("y", "yes"), ("Y", "yes"), ("n", "no"), ("", "no"), ("a", "always"), ("all", "always")],
 )
 def test_security_alert_still_works_without_a_preview(monkeypatch, answer, expected):
     monkeypatch.setattr("termicode.ui.console.input", lambda *a, **k: answer)
 
-    assert print_security_alert("Write / Overwrite File", "example.py") is expected
+    assert print_security_alert("Write / Overwrite File", "example.py") == expected
 
 
 def test_security_alert_renders_the_preview(monkeypatch, capsys):

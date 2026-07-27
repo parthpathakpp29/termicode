@@ -79,6 +79,7 @@ def print_help():
     table.add_row("/doctor", "Check local setup, dependencies, Git, and Repowise")
     table.add_row("/report", "Generate a Markdown repo health report")
     table.add_row("/guard on|off", "Toggle the Git pre-commit interceptor")
+    table.add_row("/approve on|off", "Auto-approve file writes/edits/deletes for this session")
     table.add_row("/ripple <prompt>", "Execute an architecture change and fix cascading dependencies")
     console.print(table)
     console.print()
@@ -225,15 +226,12 @@ def print_api_error(err):
     ))
 
 
-def print_security_alert(action: str, file_path: str, preview: str = None) -> bool:
-    """Renders a security confirmation prompt and returns bool approval.
-
-    `preview` describes what the operation would actually do, so the user is
-    approving a visible change rather than a file path.
-    """
+def _render_security_panels(action: str, file_path: str, preview: str = None, *, badge: str = None):
+    """Renders the action + preview panels shared by a prompt and an auto-approved notice."""
+    title = "[bold red]Security Alert[/]" if badge is None else f"[bold red]Security Alert[/] {badge}"
     console.print(Panel(
         f"[bold white]{action}[/]\n[dim]File:[/] [cyan]{file_path}[/]",
-        title="[bold red]Security Alert[/]",
+        title=title,
         border_style="red",
         box=box.HEAVY,
         padding=(0, 2),
@@ -248,8 +246,33 @@ def print_security_alert(action: str, file_path: str, preview: str = None) -> bo
             padding=(0, 1),
         ))
 
-    answer = console.input("  [bold]Allow? ([green]y[/]/[red]N[/]):[/] ").strip().lower()
-    return answer == "y"
+
+def print_security_alert(action: str, file_path: str, preview: str = None) -> str:
+    """Renders a security confirmation prompt.
+
+    `preview` describes what the operation would actually do, so the user is
+    approving a visible change rather than a file path.
+
+    Returns "yes", "no", or "always" — "always" means the user granted
+    blanket approval for the rest of the session, not just this one action.
+    """
+    _render_security_panels(action, file_path, preview)
+
+    answer = console.input("  [bold]Allow? ([green]y[/]/[red]N[/]/[cyan]a[/]=always):[/] ").strip().lower()
+    if answer in ("a", "all", "always"):
+        return "always"
+    if answer == "y":
+        return "yes"
+    return "no"
+
+
+def print_auto_approved(action: str, file_path: str, preview: str = None):
+    """Shows the same panels as print_security_alert, without blocking for input.
+
+    Used once auto-approve is on, so later actions stay visible in full —
+    approving in advance should not mean approving blind.
+    """
+    _render_security_panels(action, file_path, preview, badge="[dim white](auto-approved)[/]")
 
 
 def print_command_alert(command: str) -> bool:

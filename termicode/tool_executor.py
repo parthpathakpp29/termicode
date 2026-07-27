@@ -4,12 +4,60 @@ import os
 from termicode import tools
 from termicode.diff import build_delete_preview, build_edit_preview, build_write_preview
 from termicode.ui import (
+    print_auto_approved,
     print_backup_notice,
     print_command_alert,
     print_security_alert,
     print_tool_result,
     print_tool_triggered,
 )
+
+
+class ApprovalState:
+    """Session-scoped approval state for file write/edit/delete tools.
+
+    A small object rather than a bare module variable, so the state has one
+    named home to reset from in tests and to reason about, instead of a global
+    that could be reassigned from anywhere. There is exactly one instance for
+    the process — TermiCode is a single, interactive session, not a server —
+    so this is not a general session/config framework, just a home for one flag.
+
+    Deliberately does not cover run_command: a diff preview can show what a
+    file write will do in advance; it cannot show what an arbitrary shell
+    command will do, so that prompt always blocks regardless of this flag.
+
+    Not persisted across restarts — carrying "approve everything" silently
+    into a session the user does not remember granting it in would be a
+    bigger risk than asking again next time.
+    """
+
+    def __init__(self):
+        self.auto_approve_files = False
+
+    def enable(self) -> None:
+        self.auto_approve_files = True
+
+    def disable(self) -> None:
+        self.auto_approve_files = False
+
+
+approval_state = ApprovalState()
+
+
+def _confirm(action: str, file_path: str, preview: str) -> bool:
+    """Shows the pending change and returns whether it is approved.
+
+    Answering "always" at the prompt turns on auto-approve for the rest of
+    the session; later calls then show the same preview without blocking.
+    """
+    if approval_state.auto_approve_files:
+        print_auto_approved(action, file_path, preview)
+        return True
+
+    response = print_security_alert(action, file_path, preview)
+    if response == "always":
+        approval_state.enable()
+    return response in ("yes", "always")
 
 
 class MockToolCall:
@@ -59,7 +107,7 @@ def execute_tool(tool_call) -> str:
         # of a protected file into the preview below.
         if tools._is_protected(file_path):
             result = f"Error: Access to '{os.path.basename(file_path)}' is permanently restricted for security reasons."
-        elif print_security_alert(
+        elif _confirm(
             "Write / Overwrite File", file_path, build_write_preview(file_path, content)
         ):
             result = tools.write_file_approved(file_path, content)
@@ -83,7 +131,7 @@ def execute_tool(tool_call) -> str:
             result = "Error: search_string cannot be empty."
         elif tools._is_protected(file_path):
             result = f"Error: Access to '{os.path.basename(file_path)}' is permanently restricted for security reasons."
-        elif print_security_alert(
+        elif _confirm(
             "Surgical File Edit", file_path, build_edit_preview(file_path, search_string, replace_string)
         ):
             result = tools.edit_file_approved(file_path, search_string, replace_string)
@@ -107,7 +155,7 @@ def execute_tool(tool_call) -> str:
         file_path = args.get("file_path")
         if tools._is_protected(file_path):
             result = f"Error: Access to '{os.path.basename(file_path)}' is permanently restricted."
-        elif print_security_alert("Delete File", file_path, build_delete_preview(file_path)):
+        elif _confirm("Delete File", file_path, build_delete_preview(file_path)):
             try:
                 result = tools.delete_file_approved(file_path)
             except Exception as e:

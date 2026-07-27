@@ -23,7 +23,7 @@ from termicode.session import (
     update_memory_summary,
 )
 from termicode.startup import validate_startup
-from termicode.tool_executor import MockToolCall, execute_tool
+from termicode.tool_executor import MockToolCall, approval_state, execute_tool
 from termicode.ui import (
     console,
     make_response_panel,
@@ -452,6 +452,16 @@ def main():
                     _install_guard_hook()
                 elif cmd == "/guard off":
                     _remove_guard_hook()
+                elif cmd == "/approve":
+                    state = "ON" if approval_state.auto_approve_files else "OFF"
+                    console.print(f"  [bold blue]i[/]  Auto-approve for file writes/edits/deletes is: {state}")
+                    console.print("  [dim]run_command always prompts, regardless of this setting.[/]")
+                elif cmd == "/approve on":
+                    approval_state.enable()
+                    print_success("Auto-approve ENABLED for file writes, edits, and deletes.")
+                elif cmd == "/approve off":
+                    approval_state.disable()
+                    print_success("Auto-approve DISABLED. TermiCode will prompt for file changes again.")
                 else:
                     print_warning(f"Unknown command: [bold]{user_input}[/]. Type [cyan]/help[/] for available commands.")
                 continue
