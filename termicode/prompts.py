@@ -1,7 +1,13 @@
 import os
 
 
-def build_system_prompt(current_map: str, summary: str = "") -> str:
+def build_system_prompt(current_map: str, summary: str = "", repowise_available: bool = True) -> str:
+    """Build the system prompt.
+
+    ``repowise_available`` gates the instructions that reference Repowise-backed
+    tools, so the model is never told to call a tool that is not in its schema.
+    It defaults to True so existing callers keep their current output.
+    """
     custom_rules = ""
     if os.path.exists("AGENT.md"):
         try:
@@ -16,25 +22,47 @@ def build_system_prompt(current_map: str, summary: str = "") -> str:
         else ""
     )
 
+    instructions = [
+        "If you need to find where a specific function, variable, or text is located in the project, use 'search_codebase' first before trying to read files blindly.",
+        "Never guess file contents. Use 'read_file'.",
+        "Use 'write_file' ONLY for new files. For existing files, ALWAYS use 'edit_file' to patch lines surgically.",
+        "When a user asks you to run, execute, or test code, you MUST use the 'run_command' tool to execute it in the terminal. Do NOT just print the code back to the user.",
+        "CRITICAL TOKEN LIMIT: Never attempt to read more than 1 large file per turn.",
+        "When using 'edit_file', your search_string MUST EXACTLY MATCH the file's existing text, including all whitespaces and line breaks.",
+        "CRITICAL JSON FORMATTING: When using 'write_file' or 'edit_file', your code payload MUST be a single, properly escaped multiline string. NEVER output an array, list, or unescaped quotes. Do NOT wrap the code in markdown ``` blocks inside the JSON argument.",
+        "ANTI-WANDERING PROTOCOL: Do not endlessly explore the directory. Read a maximum of 2 files for context, make a technical decision, execute the code, and return your final answer to the user immediately.",
+    ]
+
+    if repowise_available:
+        instructions.append(
+            "REPOWISE INTEGRATION: You are connected to the Repowise intelligence engine. You MUST use tools like 'get_overview' and 'get_context' to understand project architecture and defect risks before modifying complex files. Rely on Repowise for deep context."
+        )
+
+    ripple_lookup = "'search_codebase' or 'get_context'" if repowise_available else "'search_codebase'"
+    instructions.append(
+        f"RIPPLE ORCHESTRATION: If you modify a function signature, API endpoint, or database schema, you MUST immediately use {ripple_lookup} to find all dependent files that call it, and autonomously use 'edit_file' to update them. Do not stop until the system is consistent."
+    )
+
+    numbered_instructions = "\n".join(
+        f"{position}. {text}" for position, text in enumerate(instructions, 1)
+    )
+
     return (
         "You are TermiCode, an expert AI coding assistant.\n"
         "You have access to tools to read files, write files, and run terminal commands.\n"
         f"Project map:\n{current_map}\n{custom_rules}\n{memory_block}\n"
-        "1. If you need to find where a specific function, variable, or text is located in the project, use 'search_codebase' first before trying to read files blindly.\n"
-        "2. Never guess file contents. Use 'read_file'.\n"
-        "3. Use 'write_file' ONLY for new files. For existing files, ALWAYS use 'edit_file' to patch lines surgically.\n"
-        "4. When a user asks you to run, execute, or test code, you MUST use the 'run_command' tool to execute it in the terminal. Do NOT just print the code back to the user.\n"
-        "5. CRITICAL TOKEN LIMIT: Never attempt to read more than 1 large file per turn.\n"
-        "6. When using 'edit_file', your search_string MUST EXACTLY MATCH the file's existing text, including all whitespaces and line breaks.\n"
-        "7. CRITICAL JSON FORMATTING: When using 'write_file' or 'edit_file', your code payload MUST be a single, properly escaped multiline string. NEVER output an array, list, or unescaped quotes. Do NOT wrap the code in markdown ``` blocks inside the JSON argument.\n"
-        "8. ANTI-WANDERING PROTOCOL: Do not endlessly explore the directory. Read a maximum of 2 files for context, make a technical decision, execute the code, and return your final answer to the user immediately.\n"
-        "9. REPOWISE INTEGRATION: You are connected to the Repowise intelligence engine. You MUST use tools like 'get_overview' and 'get_context' to understand project architecture and defect risks before modifying complex files. Rely on Repowise for deep context.\n"
-        "10. RIPPLE ORCHESTRATION: If you modify a function signature, API endpoint, or database schema, you MUST immediately use 'search_codebase' or 'get_context' to find all dependent files that call it, and autonomously use 'edit_file' to update them. Do not stop until the system is consistent."
+        f"{numbered_instructions}"
     )
 
 
-def get_available_tools() -> list:
-    return [
+def get_available_tools(repowise_available: bool = True) -> list:
+    """Return the tool schema offered to the model.
+
+    The Repowise-backed tools are omitted when Repowise is absent: offering a
+    tool that can only return an error wastes tokens and derails weaker models.
+    Defaults to True so existing callers keep the full tool list.
+    """
+    tools = [
         {"type": "function", "function": {"name": "list_directory", "description": "Lists files in directory.", "parameters": {"type": "object", "properties": {"directory_path": {"type": "string"}}}}},
         {"type": "function", "function": {
             "name": "read_file",
@@ -89,23 +117,29 @@ def get_available_tools() -> list:
             "description": "Auto-generates an AGENT.md configuration file based on detected project type.",
             "parameters": {"type": "object", "properties": {}, "required": []},
         }},
-        {"type": "function", "function": {
-            "name": "get_overview",
-            "description": "Fetches the architectural overview, module map, and entry points.",
-            "parameters": {"type": "object", "properties": {}},
-        }},
-        {"type": "function", "function": {
-            "name": "get_context",
-            "description": "Triage card for files/modules with graph-aware context.",
-            "parameters": {"type": "object", "properties": {
-                "targets": {"type": "string", "description": "The file paths or symbols to get context for."},
-            }, "required": ["targets"]},
-        }},
-        {"type": "function", "function": {
-            "name": "get_health",
-            "description": "Scores files for defect risk, maintainability, and performance.",
-            "parameters": {"type": "object", "properties": {
-                "targets": {"type": "string", "description": "Optional specific files to score."},
-            }},
-        }},
     ]
+
+    if repowise_available:
+        tools.extend([
+            {"type": "function", "function": {
+                "name": "get_overview",
+                "description": "Fetches the architectural overview, module map, and entry points.",
+                "parameters": {"type": "object", "properties": {}},
+            }},
+            {"type": "function", "function": {
+                "name": "get_context",
+                "description": "Triage card for files/modules with graph-aware context.",
+                "parameters": {"type": "object", "properties": {
+                    "targets": {"type": "string", "description": "The file paths or symbols to get context for."},
+                }, "required": ["targets"]},
+            }},
+            {"type": "function", "function": {
+                "name": "get_health",
+                "description": "Scores files for defect risk, maintainability, and performance.",
+                "parameters": {"type": "object", "properties": {
+                    "targets": {"type": "string", "description": "Optional specific files to score."},
+                }},
+            }},
+        ])
+
+    return tools

@@ -13,6 +13,7 @@ class DoctorCheck:
     ok: bool
     detail: str
     fix: str = ""
+    optional: bool = False
 
 
 def _run_command(command: List[str], timeout: int = 10) -> subprocess.CompletedProcess:
@@ -84,21 +85,24 @@ def _check_repowise(runner: Callable[[List[str], int], subprocess.CompletedProce
             name="Repowise",
             ok=ok,
             detail=output or ("Repowise is available." if ok else "Repowise command failed."),
-            fix="Install or repair Repowise before using /heal, /guard, and /report." if not ok else "",
+            fix="Run 'pip install repowise' to enable /heal, /guard, and /report." if not ok else "",
+            optional=True,
         )
     except FileNotFoundError:
         return DoctorCheck(
             name="Repowise",
             ok=False,
-            detail="Repowise is not installed or not in PATH.",
-            fix="Install Repowise before using /heal, /guard, and /report.",
+            detail="Repowise is not installed. TermiCode works without it; /heal, /guard, and /report are disabled.",
+            fix="Run 'pip install repowise' to enable those commands.",
+            optional=True,
         )
     except (OSError, subprocess.TimeoutExpired) as exc:
         return DoctorCheck(
             name="Repowise",
             ok=False,
             detail=f"Could not run Repowise: {exc}",
-            fix="Check your Repowise installation.",
+            fix="Check your Repowise installation, or ignore this if you do not use /heal, /guard, or /report.",
+            optional=True,
         )
 
 
@@ -150,12 +154,22 @@ def run_doctor(
 
 
 def format_doctor_summary(checks: List[DoctorCheck]) -> str:
-    passed = sum(1 for check in checks if check.ok)
-    total = len(checks)
-    lines = [f"TermiCode Doctor: {passed}/{total} checks passed.", ""]
+    """Render checks for display.
+
+    Optional checks are reported but excluded from the pass count, so a missing
+    optional dependency never reads as a broken installation.
+    """
+    required = [check for check in checks if not check.optional]
+    passed = sum(1 for check in required if check.ok)
+    lines = [f"TermiCode Doctor: {passed}/{len(required)} required checks passed.", ""]
 
     for check in checks:
-        status = "PASS" if check.ok else "FAIL"
+        if check.ok:
+            status = "PASS"
+        elif check.optional:
+            status = "OPTIONAL"
+        else:
+            status = "FAIL"
         lines.append(f"- {status}: {check.name} - {check.detail}")
         if check.fix:
             lines.append(f"  Fix: {check.fix}")

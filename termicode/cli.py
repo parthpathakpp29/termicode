@@ -3,7 +3,7 @@ import os
 from dotenv import load_dotenv
 from rich.live import Live
 
-from termicode import tools
+from termicode import repowise, tools
 from termicode.doctor import format_doctor_summary, run_doctor
 from termicode.models import OPENROUTER_MODEL_STATS, get_token_usage, route_model
 from termicode.project import generate_local_project_map
@@ -36,6 +36,27 @@ from termicode.ui import (
     print_warning,
     print_error,
 )
+
+
+def _require_repowise(feature: str, repowise_available: bool) -> bool:
+    """Guard a Repowise-backed command, explaining how to enable it if missing."""
+    if repowise_available:
+        return True
+
+    print_warning(f"{feature} requires Repowise, which is not installed.")
+    console.print(f"  [dim]Enable it with:[/] [cyan]{repowise.INSTALL_HINT}[/]")
+    return False
+
+
+def _require_repowise(feature: str, repowise_available: bool) -> bool:
+    """Return True when `feature` can run, warning with install steps if not."""
+    if repowise_available:
+        return True
+
+    print_warning(f"{feature} requires Repowise, which is not installed.")
+    console.print(f"  [dim]Enable it with:[/] [cyan]{repowise.INSTALL_HINT}[/]")
+    console.print("  [dim]Then run[/] [cyan]/doctor[/] [dim]to re-check without restarting.[/]")
+    return False
 
 
 def _build_heal_prompt(target_file: str) -> str:
@@ -158,7 +179,8 @@ def main():
     print_banner()
 
     client = validate_startup()
-    available_tools = get_available_tools()
+    repowise_available = repowise.is_available()
+    available_tools = get_available_tools(repowise_available)
     current_model = "qwen/qwen3-coder"
     user_manually_selected_model = False
     session_tokens = 0
@@ -168,10 +190,10 @@ def main():
     history = load_chat_history()
     if history:
         messages = history
-        messages[0]["content"] = build_system_prompt(project_structure, conversation_summary)
+        messages[0]["content"] = build_system_prompt(project_structure, conversation_summary, repowise_available)
         print_startup_info(rehydrated=True, history_file=HISTORY_FILE)
     else:
-        messages = [{"role": "system", "content": build_system_prompt(project_structure, conversation_summary)}]
+        messages = [{"role": "system", "content": build_system_prompt(project_structure, conversation_summary, repowise_available)}]
         print_startup_info(rehydrated=False, history_file=HISTORY_FILE)
 
     while True:
@@ -182,6 +204,8 @@ def main():
                 continue
 
             if user_input.startswith("/heal"):
+                if not _require_repowise("/heal", repowise_available):
+                    continue
                 parts = user_input.split(maxsplit=1)
                 if len(parts) < 2:
                     print_warning("Usage: /heal <filename> (e.g., /heal termicode/cli.py)")
@@ -210,7 +234,7 @@ def main():
                     print_banner()
                 elif cmd == "/map":
                     project_structure = generate_local_project_map()
-                    messages[0]["content"] = build_system_prompt(project_structure, conversation_summary)
+                    messages[0]["content"] = build_system_prompt(project_structure, conversation_summary, repowise_available)
                     print_project_map(project_structure)
                 elif cmd.startswith("/undo"):
                     parts = user_input.split(maxsplit=1)
@@ -231,7 +255,7 @@ def main():
                         os.remove(MEMORY_FILE)
                     conversation_summary = ""
                     project_structure = generate_local_project_map()
-                    messages = [{"role": "system", "content": build_system_prompt(project_structure)}]
+                    messages = [{"role": "system", "content": build_system_prompt(project_structure, "", repowise_available)}]
                     print_success("History cleared. Fresh session started.")
                 elif cmd == "/help":
                     print_help()
@@ -259,16 +283,32 @@ def main():
                     console.print(f"  [bold green]Cost[/]  [dim]Estimated Cost:[/] [green]${estimated_cost:.6f}[/]")
                     console.print(f"  [dim]Model: {current_model}[/]")
                 elif cmd == "/doctor":
+                    repowise.reset_cache()
                     checks = run_doctor()
                     summary = format_doctor_summary(checks)
                     console.print(make_response_panel(summary))
+
+                    # Re-detecting can flip availability if the user just installed
+                    # Repowise. Keep the prompt and the tool schema in step with it.
+                    if repowise.is_available() != repowise_available:
+                        repowise_available = repowise.is_available()
+                        available_tools = get_available_tools(repowise_available)
+                        messages[0]["content"] = build_system_prompt(
+                            project_structure, conversation_summary, repowise_available
+                        )
+                        state = "enabled" if repowise_available else "disabled"
+                        print_success(f"Repowise {state}. Tools and instructions updated for this session.")
                 elif cmd == "/report":
+                    if not _require_repowise("/report", repowise_available):
+                        continue
                     try:
                         report_path = generate_repo_report()
                         print_success(f"Repo health report generated: {report_path}")
                     except Exception as e:
                         print_error(f"Failed to generate report: {e}")
                 elif cmd == "/guard on":
+                    if not _require_repowise("/guard", repowise_available):
+                        continue
                     _install_guard_hook()
                 elif cmd == "/guard off":
                     _remove_guard_hook()

@@ -1,9 +1,9 @@
 import os
-import subprocess
 import sys
 
 from openai import OpenAI
 
+from termicode import repowise
 from termicode.ui import console, print_api_error, print_error, print_warning
 
 
@@ -48,21 +48,20 @@ def validate_startup() -> OpenAI:
         )
         sys.exit(1)
 
-    console.print("[dim] Checking Repowise MCP Engine...[/]", end="")
-    try:
-        subprocess.run(["repowise", "--version"], capture_output=True, check=True, text=True)
+    console.print("[dim] Checking Repowise Engine (optional)...[/]", end="")
+    if repowise.is_available():
         console.print(" [bold green]OK[/]")
 
         console.print("  [dim]Indexing Codebase (Zero-LLM)...[/]", end="")
-        subprocess.run(["repowise", "init", "--index-only", "-y"], capture_output=True)
-        console.print("[bold green]OK[/]")
-
-    except FileNotFoundError:
-        console.print(" [bold red]FAILED[/]\n")
-        print_error("Repowise is not installed. Please open your terminal and run:\npip install repowise")
-        sys.exit(1)
-    except Exception as e:
-        console.print(" [bold red]FAILED[/]\n")
-        print_warning(f"Repowise indexing encountered a minor issue: {e}")
+        try:
+            repowise.ensure_indexed()
+            console.print("[bold green]OK[/]")
+        except Exception as e:
+            console.print(" [bold orange3]SKIPPED[/]")
+            print_warning(f"Repowise indexing encountered a minor issue: {e}")
+    else:
+        console.print(" [bold orange3]NOT FOUND[/]")
+        print_warning(f"Repowise is not installed, so {repowise.FEATURES} are disabled.")
+        console.print(f"  [dim]Everything else works normally. To enable them, run:[/] [cyan]{repowise.INSTALL_HINT}[/]")
 
     return client

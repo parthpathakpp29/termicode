@@ -1,5 +1,7 @@
 import subprocess
 
+from termicode import repowise
+
 
 def get_overview() -> str:
     """Fetches the architectural overview."""
@@ -13,6 +15,12 @@ def get_context(targets: str) -> str:
 
 def get_health(targets: str = "") -> str:
     """Fetches code health metrics. Works 100% locally."""
+    if not repowise.is_available():
+        return (
+            "Code health metrics are unavailable because Repowise is not installed. "
+            f"Install it with `{repowise.INSTALL_HINT}` to enable this tool."
+        )
+
     try:
         cmd = ["repowise", "health"]
         result = subprocess.run(
