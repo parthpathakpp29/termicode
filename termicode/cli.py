@@ -1,5 +1,6 @@
 import json
 import os
+import shutil
 
 from dotenv import load_dotenv
 from rich.live import Live
@@ -169,8 +170,19 @@ def _install_guard_hook() -> None:
         print_warning("Not a Git repository. Run 'git init' first.")
         return
 
+    # The hook shells out to an installed console script rather than a bundled
+    # file, so it works from any project regardless of the current directory
+    # or which "python" (if any) is on PATH. If it is not resolvable, the hook
+    # would fail on every commit exactly like the version this replaced did.
+    if shutil.which("termicode-guard-check") is None:
+        print_error(
+            "Could not find 'termicode-guard-check' on PATH. "
+            "Reinstall TermiCode (pip install -e . or pip install termicode) and try again."
+        )
+        return
+
     os.makedirs(hook_dir, exist_ok=True)
-    bash_hook_script = "#!/bin/sh\npython pre_commit_hook.py\n"
+    bash_hook_script = "#!/bin/sh\ntermicode-guard-check\n"
 
     try:
         with open(hook_path, "w", newline="\n") as f:
@@ -180,7 +192,8 @@ def _install_guard_hook() -> None:
             os.chmod(hook_path, 0o755)
 
         print_success("Pre-Commit Guardian ENABLED. TermiCode will now intercept your git commits.")
-    except Exception as e:
+        print_success("(Re-running this also repairs a hook installed by an older TermiCode version.)")
+    except OSError as e:
         print_error(f"Failed to write Git hook: {e}")
 
 

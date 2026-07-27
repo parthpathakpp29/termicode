@@ -47,6 +47,7 @@ repowise = [
 
 [project.scripts]
 termicode = "termicode.cli:main"
+termicode-guard-check = "termicode.guard_check:main"
 
 [project.urls]
 Homepage = "https://github.com/parthpathakpp29/termicode"
