@@ -15,6 +15,8 @@ from termicode.session import (
     memory_path,
     migrate_legacy_session,
     save_session,
+    session_dir,
+    termicode_home,
 )
 
 
@@ -115,6 +117,19 @@ def test_migration_never_overwrites_a_newer_session(isolated_home):
 
 def test_migration_is_a_no_op_without_legacy_files(isolated_home):
     assert migrate_legacy_session() is None
+
+
+def test_termicode_home_is_the_parent_of_session_dir(isolated_home):
+    home, _ = isolated_home
+
+    assert termicode_home() == home
+    assert session_dir() == home / "sessions"
+
+
+def test_session_dir_falls_back_when_home_itself_is_unusable(isolated_home, monkeypatch):
+    monkeypatch.setattr("termicode.session.termicode_home", lambda: None)
+
+    assert session_dir() is None
 
 
 def test_falls_back_to_the_project_when_home_is_unusable(isolated_home, monkeypatch):

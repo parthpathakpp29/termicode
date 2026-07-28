@@ -27,23 +27,48 @@ def _project_key() -> str:
     return f"{name}-{digest}"
 
 
-def session_dir() -> Optional[Path]:
-    """Where session state is kept, or None when the home directory is unusable.
+def termicode_home() -> Optional[Path]:
+    """Root of TermiCode's on-disk state (~/.termicode by default).
 
-    Honours $TERMICODE_HOME. Returning None makes callers fall back to the old
-    project-local filenames, so an unwritable home degrades instead of crashing.
+    Shared by session storage (session_dir()) and the model catalog cache.
+    Honours $TERMICODE_HOME. Returns None when the directory cannot be
+    created or used, so callers can degrade instead of crashing.
     """
     global _warned_about_fallback
 
     override = os.environ.get("TERMICODE_HOME", "").strip()
     try:
         root = Path(override) if override else Path.home() / ".termicode"
-        directory = root / "sessions"
+        root.mkdir(parents=True, exist_ok=True)
+        if os.name == "posix":
+            os.chmod(root, 0o700)
+        return root
+    except (OSError, RuntimeError) as exc:
+        if not _warned_about_fallback:
+            _warned_about_fallback = True
+            print_warning(f"Could not use the TermiCode home directory ({exc}). Keeping session files in this folder.")
+        return None
+
+
+def session_dir() -> Optional[Path]:
+    """Where session state is kept, or None when the home directory is unusable.
+
+    Returning None makes callers fall back to the old project-local
+    filenames, so an unwritable home degrades instead of crashing.
+    """
+    global _warned_about_fallback
+
+    home = termicode_home()
+    if home is None:
+        return None
+
+    try:
+        directory = home / "sessions"
         directory.mkdir(parents=True, exist_ok=True)
         if os.name == "posix":
             os.chmod(directory, 0o700)
         return directory
-    except (OSError, RuntimeError) as exc:
+    except OSError as exc:
         if not _warned_about_fallback:
             _warned_about_fallback = True
             print_warning(f"Could not use the session directory ({exc}). Keeping session files in this folder.")
