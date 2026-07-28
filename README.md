@@ -22,6 +22,16 @@ It helps you inspect a repository, make safe code changes, and run lightweight a
 - Open-source contributors who want a lightweight tool for repository exploration
 - Developers who prefer terminal-first workflows over heavy IDE integrations
 
+## 📚 Documentation
+
+- [ARCHITECTURE.md](ARCHITECTURE.md) - module map, the lifecycle of a single turn, and known constraints
+- [CONTRIBUTING.md](CONTRIBUTING.md) - setup, development workflow, testing, and how to propose a change
+- [docs/model-routing.md](docs/model-routing.md) - the live model catalog, free/budget/premium tiers, and rate-limit fallback
+- [docs/tool-system.md](docs/tool-system.md) - how a tool call goes from the model to a Python function and back, and how to add a tool
+- [docs/sessions.md](docs/sessions.md) - where conversation history and memory live on disk, and how context pruning works
+- [docs/file-editing.md](docs/file-editing.md) - the sandbox boundary, backups, and `/undo`
+- [docs/approval-flow.md](docs/approval-flow.md) - the diff-preview and `y/N/a` approval prompt, and why `run_command` never auto-approves
+
 ## 🚀 Installation
 
 TermiCode is not yet published on PyPI, so install it from source:
@@ -66,11 +76,11 @@ TermiCode remembers your conversation between runs, per project. That history in
 
 Earlier versions wrote these into the project folder as .termicode_history.json and .termicode_memory.json. If you have those, TermiCode moves them to the new location on first run and tells you where they went.
 
-Set TERMICODE_HOME to keep them somewhere else. Use /reset to erase the session for the current project.
+Set TERMICODE_HOME to keep them somewhere else. Use /reset to erase the session for the current project. See [docs/sessions.md](docs/sessions.md) for how this is keyed and how context pruning/summarization works.
 
 ### Model selection
 
-TermiCode fetches the live OpenRouter model list rather than picking from a hardcoded set, so it stays correct as models are added, repriced, or retired. The catalog is cached under ~/.termicode/catalog.json and refreshed automatically after 6 hours (set TERMICODE_CATALOG_TTL_SECONDS to change that).
+TermiCode fetches the live OpenRouter model list rather than picking from a hardcoded set, so it stays correct as models are added, repriced, or retired. The catalog is cached under ~/.termicode/catalog.json and refreshed automatically after 6 hours (set TERMICODE_CATALOG_TTL_SECONDS to change that). See [docs/model-routing.md](docs/model-routing.md) for how models are scored and how the fallback chain works.
 
 - By default, TermiCode auto-routes to the best-ranked free model that supports tool calling. Run /model auto to return to this after picking a specific model.
 - /model budget switches to the cheapest available paid model that still supports tool calling - useful when the free tier is rate-limited and a few cents is an acceptable tradeoff.
@@ -120,7 +130,7 @@ Once it starts, you can use commands such as:
 - /undo <file> - Restore the most recent backup for a file
 - /report - Generate a repository health report (requires Repowise)
 - /guard on|off - Toggle the Git pre-commit interceptor (requires Repowise)
-- /approve on|off - Auto-approve file writes/edits/deletes for this session (run_command always prompts)
+- /approve on|off - Auto-approve file writes/edits/deletes for this session (run_command always prompts, see [docs/approval-flow.md](docs/approval-flow.md))
 - /ripple <prompt> - Apply a multi-file architecture change
 - /exit - Save the session and quit
 
@@ -138,33 +148,13 @@ To run the test suite locally:
 pytest
 ```
 
+See [CONTRIBUTING.md](CONTRIBUTING.md) for full setup instructions, what the test suite expects, and code style notes.
+
 ## 🤝 Contributing
 
-TermiCode is designed to be a community-driven project, and we welcome contributions from students and beginner developers.
+TermiCode is designed to be a community-driven project, and we welcome contributions from students and beginner developers - you do not need to be an expert to help. Fixing a small bug, adding a test, or improving documentation are all genuinely useful.
 
-You do not need to be an expert to help. Good ways to start include:
-
-- fixing a small bug
-- improving the CLI experience
-- adding tests for an existing feature
-- improving documentation and setup instructions
-- adding a new slash command or small feature
-- helping with onboarding examples
-
-If you want to contribute:
-
-1. Fork the repository
-2. Create a new branch for your change
-3. Make a small, focused update
-4. Run the tests
-5. Open a pull request with a clear explanation
-
-Beginner-friendly ideas:
-
-- improve error messages
-- add a new example workflow
-- write documentation for a feature
-- suggest or implement a small quality-of-life improvement
+See **[CONTRIBUTING.md](CONTRIBUTING.md)** for setup, the development workflow, PR guidelines, and where to start if you're not sure what to work on. If you want to understand how the pieces fit together before making a change, start with **[ARCHITECTURE.md](ARCHITECTURE.md)**.
 
 If you are unsure where to start, open an issue and say you would like to help. We will be happy to guide you.
 
