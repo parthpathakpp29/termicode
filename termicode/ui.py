@@ -75,6 +75,7 @@ def print_help():
     table.add_row("/reset", "Wipe chat history and start fresh")
     table.add_row("/exit", "Save session and quit")
     table.add_row("/model", "Shows which model is in use")
+    table.add_row("/model auto|budget|<name>", "Live best free pick, cheapest paid pick, or a specific model")
     table.add_row("/stats", "Show token usage")
     table.add_row("/doctor", "Check local setup, dependencies, Git, and Repowise")
     table.add_row("/report", "Generate a Markdown repo health report")

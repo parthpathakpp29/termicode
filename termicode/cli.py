@@ -6,9 +6,9 @@ from dotenv import load_dotenv
 from openai import RateLimitError
 from rich.live import Live
 
-from termicode import repowise, tools
+from termicode import catalog, repowise, tools
 from termicode.doctor import format_doctor_summary, run_doctor
-from termicode.models import OPENROUTER_MODEL_STATS, get_token_usage, next_fallback_model, route_model
+from termicode.models import get_token_usage, next_fallback_model, route_model
 from termicode.project import generate_local_project_map
 from termicode.prompts import build_system_prompt, get_available_tools
 from termicode.report import generate_repo_report
@@ -48,8 +48,8 @@ from termicode.ui import (
 
 
 # Ceiling on a single model response. Large enough to write a real file in one
-# turn; low enough that every model in OPENROUTER_MODEL_STATS, including the
-# small free ones, accepts it. Per-model ceilings would belong in models.py.
+# turn; low enough that even small free-tier models accept it. Per-model
+# ceilings would belong in models.py.
 MAX_COMPLETION_TOKENS = 4096
 
 TRUNCATED_TOOL_CALL_NOTICE = (
@@ -303,13 +303,15 @@ def _stream_agent_response(client, current_model, messages, available_tools):
     return accumulated_content, accumulated_tool_calls, usage_tokens, finish_reason
 
 
-def _stream_with_fallback(client, current_model, messages, available_tools, user_manually_selected):
+def _stream_with_fallback(client, current_model, messages, available_tools, user_manually_selected, candidates):
     """Calls _stream_agent_response, retrying with a different free model on a 429.
 
     Only openai.RateLimitError triggers a retry; every other failure surfaces
     exactly as _stream_agent_response raised it. The chain length is not fixed
-    — it continues until next_fallback_model has no untried free model left to
+    — it continues until next_fallback_model has no untried candidate left to
     offer, which is what naturally bounds it, since a model is never tried twice.
+    `candidates` is the same live, ranked free-tier list used for routing this
+    turn (see catalog.free_coding_candidate_ids), not a separate lookup.
 
     Bypassed entirely when the user picked the model manually: silently
     downgrading an explicit choice is not this feature's job.
@@ -335,8 +337,7 @@ def _stream_with_fallback(client, current_model, messages, available_tools, user
             )
             return content, tool_calls, usage_tokens, finish_reason, model_to_try
         except RateLimitError:
-            preferred_tier = OPENROUTER_MODEL_STATS.get(model_to_try, {}).get("tier")
-            fallback = next_fallback_model(tried, OPENROUTER_MODEL_STATS, preferred_tier)
+            fallback = next_fallback_model(tried, candidates)
             if fallback is None:
                 raise
             print_rate_limit_fallback(model_to_try, fallback)
@@ -350,7 +351,10 @@ def main():
     client = validate_startup()
     repowise_available = repowise.is_available()
     available_tools = get_available_tools(repowise_available)
-    current_model = "qwen/qwen3-coder"
+    # Top-ranked live, free, tool-calling-capable model -- never a hardcoded
+    # id. free_coding_candidate_ids() always returns at least the built-in
+    # last-resort pair, so this list is never empty.
+    current_model = catalog.free_coding_candidate_ids()[0]
     user_manually_selected_model = False
     session_tokens = 0
 
@@ -459,10 +463,22 @@ def main():
                         new_model = parts[1].strip()
                         if new_model.lower() == "auto":
                             user_manually_selected_model = False
-                            current_model = "qwen/qwen-2.5-coder-32b-instruct"
-                            print_success("Auto-Routing Engine RE-ENABLED.")
-                        elif new_model not in OPENROUTER_MODEL_STATS:
-                            console.print(f"  [bold orange3]![/]  Unknown model. Valid options: {', '.join(OPENROUTER_MODEL_STATS.keys())}")
+                            current_model = catalog.free_coding_candidate_ids()[0]
+                            print_success(f"Auto-Routing Engine RE-ENABLED. Now using: {current_model}")
+                        elif new_model.lower() == "budget":
+                            budget_ids = catalog.budget_candidate_ids()
+                            if not budget_ids:
+                                print_warning("No paid model currently qualifies for the budget tier.")
+                            else:
+                                current_model = budget_ids[0]
+                                user_manually_selected_model = True
+                                print_success(f"Budget tier selected. Now using: {current_model}")
+                        elif new_model not in catalog.all_known_model_ids():
+                            console.print(
+                                f"  [bold orange3]![/]  Unknown model '{new_model}'. "
+                                "Run [cyan]/model[/] to see the current model, "
+                                "or [cyan]/model budget[/] / [cyan]/model auto[/] for a live pick."
+                            )
                         else:
                             current_model = new_model
                             user_manually_selected_model = True
@@ -526,10 +542,15 @@ def main():
 
             messages.append({"role": "user", "content": user_input})
 
+            # Fetched once per turn (cache-first, so this is normally instant)
+            # and reused below for the 429 fallback chain, so routing and
+            # fallback are working from the exact same live ranking.
+            candidates = catalog.free_coding_candidate_ids()
+
             selected_model = route_model(
                 user_input,
                 current_model,
-                OPENROUTER_MODEL_STATS,
+                candidates,
                 user_manually_selected_model,
                 len(messages),
             )
@@ -570,6 +591,7 @@ def main():
                             pruned_messages,
                             available_tools,
                             user_manually_selected_model,
+                            candidates,
                         )
                         session_tokens += usage_tokens
                     except RateLimitError as rate_limit_err:

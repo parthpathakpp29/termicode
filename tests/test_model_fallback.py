@@ -1,57 +1,71 @@
-from types import SimpleNamespace
-
 import httpx
 import pytest
 from openai import RateLimitError
 
 from termicode.cli import _stream_with_fallback
-from termicode.models import next_fallback_model
+from termicode.models import next_fallback_model, route_model
 
 
-STATS = {
-    "free-coder-a": {"cost_per_m": 0.0, "tier": "free_coding"},
-    "free-coder-b": {"cost_per_m": 0.0, "tier": "free_coding"},
-    "free-general-a": {"cost_per_m": 0.0, "tier": "free_general"},
-    "free-small-a": {"cost_per_m": 0.0, "tier": "free_small"},
-    "paid-premium": {"cost_per_m": 3.0, "tier": "premium"},
-}
+CANDIDATES = ["free-coder-a", "free-coder-b", "free-general-a"]
 
 
-def test_prefers_the_same_tier_as_the_failed_model():
-    assert next_fallback_model(tried={"free-coder-a"}, model_stats=STATS, preferred_tier="free_coding") == "free-coder-b"
+# --- next_fallback_model: works off a plain ranked candidate list now,
+# not a tiered {id: {tier, cost_per_m}} dict. ---
+
+def test_next_fallback_model_returns_the_first_untried_candidate():
+    assert next_fallback_model(tried={"free-coder-a"}, candidates=CANDIDATES) == "free-coder-b"
 
 
-def test_falls_back_to_another_tier_once_the_preferred_one_is_exhausted():
+def test_next_fallback_model_skips_every_tried_candidate_in_order():
     tried = {"free-coder-a", "free-coder-b"}
-    result = next_fallback_model(tried=tried, model_stats=STATS, preferred_tier="free_coding")
 
-    assert result in ("free-general-a", "free-small-a")
-
-
-def test_never_returns_a_premium_model():
-    tried = {"free-coder-a", "free-coder-b", "free-general-a", "free-small-a"}
-
-    assert next_fallback_model(tried=tried, model_stats=STATS, preferred_tier="free_coding") is None
+    assert next_fallback_model(tried=tried, candidates=CANDIDATES) == "free-general-a"
 
 
-def test_never_returns_an_already_tried_model():
-    tried = {"free-coder-a"}
-    for _ in range(10):
-        candidate = next_fallback_model(tried=tried, model_stats=STATS)
-        if candidate is None:
-            break
-        assert candidate not in tried
-        tried.add(candidate)
+def test_next_fallback_model_returns_none_once_every_candidate_is_tried():
+    tried = set(CANDIDATES)
 
-    # Every free model was eventually offered exactly once, and only those.
-    assert tried == {"free-coder-a", "free-coder-b", "free-general-a", "free-small-a"}
+    assert next_fallback_model(tried=tried, candidates=CANDIDATES) is None
 
 
-def test_returns_none_when_no_preferred_tier_given_and_all_tried():
-    tried = {"free-coder-a", "free-coder-b", "free-general-a", "free-small-a"}
+def test_next_fallback_model_on_an_empty_candidate_list():
+    assert next_fallback_model(tried=set(), candidates=[]) is None
 
-    assert next_fallback_model(tried=tried, model_stats=STATS) is None
 
+# --- route_model: a manual override always wins; otherwise today's one
+# policy returns the top-ranked candidate regardless of prompt/context_length,
+# which the design explicitly accepts (see route_model's docstring) so a
+# future policy can use them without every call site changing again. ---
+
+def test_route_model_honors_a_manual_override():
+    result = route_model("refactor this", "manually-picked-model", CANDIDATES, user_manually_selected=True)
+
+    assert result == "manually-picked-model"
+
+
+def test_route_model_returns_the_top_ranked_candidate_when_auto_routing():
+    result = route_model("explain this function", "free-coder-a", CANDIDATES, user_manually_selected=False)
+
+    assert result == CANDIDATES[0]
+
+
+def test_route_model_treats_every_intent_the_same_today():
+    """Documents the deliberate simplification: a trivial question and a real
+    coding task both resolve to the same top pick, since there is no longer a
+    reliable size/speed signal to route between them on."""
+    coding_task = route_model("refactor the whole auth module", "x", CANDIDATES, user_manually_selected=False)
+    simple_question = route_model("what does this variable do", "x", CANDIDATES, user_manually_selected=False)
+
+    assert coding_task == simple_question == CANDIDATES[0]
+
+
+def test_route_model_falls_back_to_current_model_with_no_candidates():
+    result = route_model("anything", "current", [], user_manually_selected=False)
+
+    assert result == "current"
+
+
+# --- _stream_with_fallback ---
 
 def _rate_limit_error():
     request = httpx.Request("POST", "https://openrouter.ai/api/v1/chat/completions")
@@ -75,15 +89,16 @@ class _ScriptedStream:
 
 
 def test_falls_back_once_on_a_single_rate_limit(monkeypatch):
-    monkeypatch.setattr(
-        "termicode.cli.OPENROUTER_MODEL_STATS",
-        {"free-coder-a": {"tier": "free_coding"}, "free-coder-b": {"tier": "free_coding"}},
-    )
     stream = _ScriptedStream([_rate_limit_error(), ("answer", {}, 12, "stop")])
     monkeypatch.setattr("termicode.cli._stream_agent_response", stream)
 
     content, tool_calls, usage, finish_reason, model_used = _stream_with_fallback(
-        client=None, current_model="free-coder-a", messages=[], available_tools=[], user_manually_selected=False
+        client=None,
+        current_model="free-coder-a",
+        messages=[],
+        available_tools=[],
+        user_manually_selected=False,
+        candidates=["free-coder-a", "free-coder-b"],
     )
 
     assert content == "answer"
@@ -92,37 +107,34 @@ def test_falls_back_once_on_a_single_rate_limit(monkeypatch):
 
 
 def test_never_retries_the_same_model_twice(monkeypatch):
-    monkeypatch.setattr(
-        "termicode.cli.OPENROUTER_MODEL_STATS",
-        {
-            "free-coder-a": {"tier": "free_coding"},
-            "free-coder-b": {"tier": "free_coding"},
-            "free-general-a": {"tier": "free_general"},
-        },
-    )
     stream = _ScriptedStream([_rate_limit_error(), _rate_limit_error(), ("answer", {}, 5, "stop")])
     monkeypatch.setattr("termicode.cli._stream_agent_response", stream)
 
     _, _, _, _, model_used = _stream_with_fallback(
-        client=None, current_model="free-coder-a", messages=[], available_tools=[], user_manually_selected=False
+        client=None,
+        current_model="free-coder-a",
+        messages=[],
+        available_tools=[],
+        user_manually_selected=False,
+        candidates=["free-coder-a", "free-coder-b", "free-general-a"],
     )
 
     assert model_used == "free-general-a"
     assert len(stream.models_called) == len(set(stream.models_called)) == 3
 
 
-def test_raises_once_every_free_model_is_exhausted(monkeypatch):
-    monkeypatch.setattr(
-        "termicode.cli.OPENROUTER_MODEL_STATS",
-        {"free-coder-a": {"tier": "free_coding"}, "free-coder-b": {"tier": "free_coding"}},
-    )
-    error_a, error_b = _rate_limit_error(), _rate_limit_error()
-    stream = _ScriptedStream([error_a, error_b])
+def test_raises_once_every_candidate_is_exhausted(monkeypatch):
+    stream = _ScriptedStream([_rate_limit_error(), _rate_limit_error()])
     monkeypatch.setattr("termicode.cli._stream_agent_response", stream)
 
     with pytest.raises(RateLimitError):
         _stream_with_fallback(
-            client=None, current_model="free-coder-a", messages=[], available_tools=[], user_manually_selected=False
+            client=None,
+            current_model="free-coder-a",
+            messages=[],
+            available_tools=[],
+            user_manually_selected=False,
+            candidates=["free-coder-a", "free-coder-b"],
         )
 
     assert stream.models_called == ["free-coder-a", "free-coder-b"]
@@ -131,26 +143,34 @@ def test_raises_once_every_free_model_is_exhausted(monkeypatch):
 def test_manual_model_selection_bypasses_fallback_entirely(monkeypatch):
     """A user-picked model must fail exactly as it always did — no silent
     downgrade to a free model on their behalf."""
-    monkeypatch.setattr("termicode.cli.OPENROUTER_MODEL_STATS", {"paid-premium": {"tier": "premium"}})
     stream = _ScriptedStream([_rate_limit_error()])
     monkeypatch.setattr("termicode.cli._stream_agent_response", stream)
 
     with pytest.raises(RateLimitError):
         _stream_with_fallback(
-            client=None, current_model="paid-premium", messages=[], available_tools=[], user_manually_selected=True
+            client=None,
+            current_model="paid-premium",
+            messages=[],
+            available_tools=[],
+            user_manually_selected=True,
+            candidates=["free-coder-a"],  # must be ignored entirely
         )
 
     assert stream.models_called == ["paid-premium"]
 
 
 def test_non_rate_limit_errors_are_not_retried(monkeypatch):
-    monkeypatch.setattr("termicode.cli.OPENROUTER_MODEL_STATS", {"free-coder-a": {"tier": "free_coding"}})
     stream = _ScriptedStream([ConnectionError("network is down")])
     monkeypatch.setattr("termicode.cli._stream_agent_response", stream)
 
     with pytest.raises(ConnectionError):
         _stream_with_fallback(
-            client=None, current_model="free-coder-a", messages=[], available_tools=[], user_manually_selected=False
+            client=None,
+            current_model="free-coder-a",
+            messages=[],
+            available_tools=[],
+            user_manually_selected=False,
+            candidates=["free-coder-a"],
         )
 
     assert stream.models_called == ["free-coder-a"]
