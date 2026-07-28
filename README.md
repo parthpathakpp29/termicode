@@ -68,6 +68,18 @@ Earlier versions wrote these into the project folder as .termicode_history.json 
 
 Set TERMICODE_HOME to keep them somewhere else. Use /reset to erase the session for the current project.
 
+### Model selection
+
+TermiCode fetches the live OpenRouter model list rather than picking from a hardcoded set, so it stays correct as models are added, repriced, or retired. The catalog is cached under ~/.termicode/catalog.json and refreshed automatically after 6 hours (set TERMICODE_CATALOG_TTL_SECONDS to change that).
+
+- By default, TermiCode auto-routes to the best-ranked free model that supports tool calling. Run /model auto to return to this after picking a specific model.
+- /model budget switches to the cheapest available paid model that still supports tool calling - useful when the free tier is rate-limited and a few cents is an acceptable tradeoff.
+- /model <name> pins to any specific model on OpenRouter by id, free or paid, and disables auto-routing until you run /model auto again.
+- /model with no arguments shows what is currently selected.
+- /stats shows real token usage and cost, priced from the live catalog, for whichever model you are using.
+
+If OpenRouter's free tier is rate-limiting you often, a one-time $10 credit purchase (it never expires) raises the free-tier daily request limit from 50 to 1,000 - see openrouter.ai for details.
+
 ### Optional: Repowise
 
 [Repowise](https://github.com/repowise-dev/repowise) is a codebase intelligence engine that scores files for defect risk and maintainability. TermiCode uses it to power three commands:
@@ -103,6 +115,7 @@ Once it starts, you can use commands such as:
 - /clear - Clear the terminal screen
 - /reset - Reset the current session context
 - /doctor - Check your local setup and dependencies
+- /model - Show the current model, or /model auto|budget|<name> to pick one (see "Model selection" below)
 - /heal <file> - Diagnose and refactor a specific file (requires Repowise)
 - /undo <file> - Restore the most recent backup for a file
 - /report - Generate a repository health report (requires Repowise)
