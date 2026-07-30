@@ -3,8 +3,8 @@ requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "termicode"
-version = "0.1.3"
+name = "termicode-ai"
+version = "0.2.0"
 description = "Interactive terminal AI coding assistant with secure file editing and OpenRouter-backed model access"
 readme = "README.md"
 requires-python = ">=3.8"
@@ -15,7 +15,7 @@ authors = [
 ]
 keywords = ["ai", "coding-assistant", "openrouter", "terminal", "cli"]
 classifiers = [
-    "Development Status :: 3 - Alpha",
+    "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.8",
