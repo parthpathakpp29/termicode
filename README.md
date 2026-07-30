@@ -183,15 +183,11 @@ Sessions are stored outside your repository:
 
 You can relocate them using:
 
-```bash
-TERMICODE_HOME
-```
+## Glimpse
+<img width="1920" height="1080" alt="termicodesnapshot1" src="https://github.com/user-attachments/assets/0cb42042-21e4-4c65-8a9f-cdce6dd20bba" />
+<img width="1920" height="1080" alt="termicodesnapshot2" src="https://github.com/user-attachments/assets/8c81d8fe-4303-44ab-9fd1-d0117ef86755" />
 
-Useful command:
-
-```text
-/reset
-```
+### Optional: Repowise
 
 ---
 
