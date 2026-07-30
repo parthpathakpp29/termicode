@@ -180,7 +180,7 @@ def _install_guard_hook() -> None:
     if shutil.which("termicode-guard-check") is None:
         print_error(
             "Could not find 'termicode-guard-check' on PATH. "
-            "Reinstall TermiCode (pip install -e . or pip install termicode) and try again."
+            "Reinstall TermiCode (pip install -e . or pip install termicode-ai) and try again."
         )
         return
 

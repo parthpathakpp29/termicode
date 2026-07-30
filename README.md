@@ -50,10 +50,12 @@ pip install -e .[dev]
 Once a release is published, it will also be installable with:
 
 ```bash
-pipx install termicode
+pipx install termicode-ai
 # or
-pip install termicode
+pip install termicode-ai
 ```
+
+The PyPI distribution is named `termicode-ai`; the command you run afterward is still `termicode`.
 
 ## ⚙️ Configuration
 

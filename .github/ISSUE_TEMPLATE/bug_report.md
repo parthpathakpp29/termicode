@@ -16,7 +16,7 @@ Paste the real output, not a paraphrase. If TermiCode showed an error message or
 **Environment**
 - OS: (Windows / macOS / Linux, and version)
 - Python version: (`python --version`)
-- TermiCode version: (`pip show termicode`, or the commit if installed from source)
+- TermiCode version: (`pip show termicode-ai`, or the commit if installed from source)
 - Repowise installed? (yes/no — relevant if this involves `/heal`, `/report`, or `/guard`)
 
 TermiCode's sandbox boundary and the `/guard` git hook both have OS-specific code paths (symlink/junction resolution, POSIX permission bits), so the platform often matters here.
