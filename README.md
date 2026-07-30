@@ -96,9 +96,8 @@ TermiCode fetches the live OpenRouter model list rather than picking from a hard
 If OpenRouter's free tier is rate-limiting you often, a one-time $10 credit purchase (it never expires) raises the free-tier daily request limit from 50 to 1,000 - see openrouter.ai for details.
 
 ## Glimpse
-<img width="1920" height="1080" alt="termicodesnapshot2" src="https://github.com/user-attachments/assets/8c81d8fe-4303-44ab-9fd1-d0117ef86755" />
 <img width="1920" height="1080" alt="termicodesnapshot1" src="https://github.com/user-attachments/assets/0cb42042-21e4-4c65-8a9f-cdce6dd20bba" />
-
+<img width="1920" height="1080" alt="termicodesnapshot2" src="https://github.com/user-attachments/assets/8c81d8fe-4303-44ab-9fd1-d0117ef86755" />
 
 ### Optional: Repowise
 
