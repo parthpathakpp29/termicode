@@ -1,168 +1,301 @@
 # TermiCode
 
-TermiCode is a terminal-based AI coding assistant built for students, hackathon teams, and open-source contributors who want to work faster without leaving the command line.
+> **Open-source terminal AI coding assistant with secure file editing, repository intelligence, approval prompts, and OpenRouter-powered model routing.**
 
-It helps you inspect a repository, make safe code changes, and run lightweight automation tasks directly from your terminal. It uses OpenRouter-backed models, includes guardrails for sensitive files, supports surgical file edits, and offers slash commands for repository exploration, refactoring, and session management.
+TermiCode helps developers understand, modify, and maintain codebases without leaving the terminal. It combines AI-assisted coding with built-in safety features like diff previews, approval prompts, protected file guardrails, session memory, and intelligent model routing.
+
+Unlike traditional AI coding assistants, TermiCode prioritizes **transparent and controlled code editing**. Every change can be reviewed before it touches your files, making it suitable for real development work.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
+[![PyPI](https://img.shields.io/pypi/v/termicode-ai)](https://pypi.org/project/termicode-ai/)
 
-## ✨ Why students and contributors use it
+---
 
-- Works directly in the terminal, which is ideal for developers already living in the command line.
-- Helps you understand unfamiliar codebases quickly during assignments, internships, or hackathons.
-- Makes small, focused code changes without rewriting entire files.
-- Protects sensitive paths such as .env and other guarded files.
-- Supports slash commands for mapping the repo, resetting context, generating reports, and triggering refactor workflows.
+# ✨ Features
 
-## 🎯 Who it is for
+* 🤖 OpenRouter-powered AI coding assistant
+* 🔒 Secure file editing with approval prompts
+* 📝 Unified diff preview before every file modification
+* 📂 Repository exploration and code search
+* 🧠 Persistent project memory across sessions
+* 🔄 Automatic model fallback during rate limits
+* 💰 Live model pricing and token usage tracking
+* 🛡️ Protected file guardrails (`.env`, secrets, session files)
+* ⚡ Terminal-first workflow
+* 🔌 Optional Repowise integration for repository health analysis
 
-- College students working on coding assignments and personal projects
-- Hackathon teams who want a fast CLI-based assistant
-- Open-source contributors who want a lightweight tool for repository exploration
-- Developers who prefer terminal-first workflows over heavy IDE integrations
+---
 
-## 📚 Documentation
+# 🚀 Installation
 
-- [ARCHITECTURE.md](ARCHITECTURE.md) - module map, the lifecycle of a single turn, and known constraints
-- [CONTRIBUTING.md](CONTRIBUTING.md) - setup, development workflow, testing, and how to propose a change
-- [docs/model-routing.md](docs/model-routing.md) - the live model catalog, free/budget/premium tiers, and rate-limit fallback
-- [docs/tool-system.md](docs/tool-system.md) - how a tool call goes from the model to a Python function and back, and how to add a tool
-- [docs/sessions.md](docs/sessions.md) - where conversation history and memory live on disk, and how context pruning works
-- [docs/file-editing.md](docs/file-editing.md) - the sandbox boundary, backups, and `/undo`
-- [docs/approval-flow.md](docs/approval-flow.md) - the diff-preview and `y/N/a` approval prompt, and why `run_command` never auto-approves
-- [CHANGELOG.md](CHANGELOG.md) - what changed release over release
-- [SECURITY.md](SECURITY.md) - how to report a vulnerability, and what's in scope
-- [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) - community expectations
-
-## 🚀 Installation
-
-TermiCode is not yet published on PyPI, so install it from source:
-
-```bash
-git clone https://github.com/parthpathakpp29/termicode.git
-cd termicode
-python -m venv .venv
-source .venv/bin/activate  # On Windows: .venv\Scripts\activate
-pip install -e .[dev]
-```
-
-Once a release is published, it will also be installable with:
+Install from PyPI:
 
 ```bash
 pipx install termicode-ai
+
 # or
+
 pip install termicode-ai
 ```
 
-The PyPI distribution is named `termicode-ai`; the command you run afterward is still `termicode`.
-
-## ⚙️ Configuration
-
-TermiCode requires an OpenRouter API key to start.
-
-1. Create a .env file in the directory where you run the CLI.
-2. Add your key:
-
-```env
-OPENROUTER_API_KEY=your_api_key_here
-```
-
-You can also export the variable in your shell instead of using a .env file.
-
-### Where your session is stored
-
-TermiCode remembers your conversation between runs, per project. That history includes the contents of every file it read, so it is kept outside your repository:
-
-```
-~/.termicode/sessions/<project>-<id>.history.json
-~/.termicode/sessions/<project>-<id>.memory.json
-```
-
-Earlier versions wrote these into the project folder as .termicode_history.json and .termicode_memory.json. If you have those, TermiCode moves them to the new location on first run and tells you where they went.
-
-Set TERMICODE_HOME to keep them somewhere else. Use /reset to erase the session for the current project. See [docs/sessions.md](docs/sessions.md) for how this is keyed and how context pruning/summarization works.
-
-### Model selection
-
-TermiCode fetches the live OpenRouter model list rather than picking from a hardcoded set, so it stays correct as models are added, repriced, or retired. The catalog is cached under ~/.termicode/catalog.json and refreshed automatically after 6 hours (set TERMICODE_CATALOG_TTL_SECONDS to change that). See [docs/model-routing.md](docs/model-routing.md) for how models are scored and how the fallback chain works.
-
-- By default, TermiCode auto-routes to the best-ranked free model that supports tool calling. Run /model auto to return to this after picking a specific model.
-- /model budget switches to the cheapest available paid model that still supports tool calling - useful when the free tier is rate-limited and a few cents is an acceptable tradeoff.
-- /model <name> pins to any specific model on OpenRouter by id, free or paid, and disables auto-routing until you run /model auto again.
-- /model with no arguments shows what is currently selected.
-- /stats shows real token usage and cost, priced from the live catalog, for whichever model you are using.
-
-If OpenRouter's free tier is rate-limiting you often, a one-time $10 credit purchase (it never expires) raises the free-tier daily request limit from 50 to 1,000 - see openrouter.ai for details.
-
-### Optional: Repowise
-
-[Repowise](https://github.com/repowise-dev/repowise) is a codebase intelligence engine that scores files for defect risk and maintainability. TermiCode uses it to power three commands:
-
-- /heal - diagnose and refactor a file using its health report
-- /report - generate a repository health report
-- /guard - block commits that touch low-scoring files
-
-**TermiCode works fully without it.** When Repowise is missing, those three commands explain how to enable themselves and everything else runs normally.
-
-To enable them:
-
-```bash
-pip install repowise
-```
-
-Then run /doctor to re-check - you do not need to restart TermiCode.
-
-Note that Repowise is licensed under AGPL-3.0, separately from TermiCode's MIT license, and brings a substantial dependency tree of its own. That is why it is an opt-in extra rather than a required dependency.
-
-## 💻 Usage
-
-Run the CLI from any project directory:
+Launch TermiCode:
 
 ```bash
 termicode
 ```
 
-Once it starts, you can use commands such as:
+---
 
-- /help - Show available commands
-- /map - Print the current project structure
-- /clear - Clear the terminal screen
-- /reset - Reset the current session context
-- /doctor - Check your local setup and dependencies
-- /model - Show the current model, or /model auto|budget|<name> to pick one (see "Model selection" below)
-- /heal <file> - Diagnose and refactor a specific file (requires Repowise)
-- /undo <file> - Restore the most recent backup for a file
-- /report - Generate a repository health report (requires Repowise)
-- /guard on|off - Toggle the Git pre-commit interceptor (requires Repowise)
-- /approve on|off - Auto-approve file writes/edits/deletes for this session (run_command always prompts, see [docs/approval-flow.md](docs/approval-flow.md))
-- /ripple <prompt> - Apply a multi-file architecture change
-- /exit - Save the session and quit
+# ⚡ Quick Start
+
+Create an OpenRouter API key:
+
+https://openrouter.ai
+
+Then configure your environment:
+
+```bash
+export OPENROUTER_API_KEY=your_api_key
+```
+
+Windows PowerShell:
+
+```powershell
+$env:OPENROUTER_API_KEY="your_api_key"
+```
+
+Start the assistant:
+
+```bash
+termicode
+```
 
 Example prompts:
 
-- Refactor a slow or brittle function in a Python module.
-- Search the repository for a symbol or configuration value.
-- Run the test suite and fix any failing tests.
+```text
+Explain this repository.
 
-## 🧪 Development
+Refactor authentication.py.
 
-To run the test suite locally:
+Find where JWT tokens are verified.
+
+Run the test suite and fix failing tests.
+
+Generate a repository health report.
+
+Improve the architecture of this module.
+```
+
+---
+
+# 💻 Example Workflow
+
+```bash
+$ termicode
+
+> Explain this repository
+
+✓ Generated architecture summary.
+
+> Refactor utils.py
+
+✓ Diff preview generated.
+✓ Waiting for approval...
+
+Approve? (y/N/a)
+
+> y
+
+✓ File updated successfully.
+
+> Run the test suite and fix failures
+
+✓ Tests executed.
+✓ Proposed fixes generated.
+```
+
+---
+
+# 🎯 Who It's For
+
+TermiCode is designed for developers who prefer working from the command line, including:
+
+* Students learning large codebases
+* Hackathon teams shipping quickly
+* Open-source contributors
+* Backend engineers
+* Python developers
+* CLI enthusiasts
+* AI-assisted development workflows
+
+---
+
+# 🛡️ Safety First
+
+Unlike many coding assistants, TermiCode is designed around explicit user control.
+
+It includes:
+
+* File protection for sensitive paths
+* Approval prompts before file modifications
+* Diff previews before writes
+* Protected session storage
+* Sandboxed file access
+* Safe undo support
+* Command approval controls
+
+---
+
+# 🧠 Intelligent Model Routing
+
+TermiCode dynamically fetches the latest available models from OpenRouter instead of relying on a hardcoded model list.
+
+Features include:
+
+* Automatic best free model selection
+* Budget mode for inexpensive paid models
+* Manual model selection
+* Live pricing information
+* Automatic fallback when a model becomes rate-limited
+
+Useful commands:
+
+```text
+/model auto
+/model budget
+/model <model-name>
+/stats
+```
+
+---
+
+# 📂 Session Memory
+
+Every project gets its own persistent conversation history.
+
+Sessions are stored outside your repository:
+
+```text
+~/.termicode/sessions/<project>-<id>.history.json
+~/.termicode/sessions/<project>-<id>.memory.json
+```
+
+You can relocate them using:
+
+```bash
+TERMICODE_HOME
+```
+
+Useful command:
+
+```text
+/reset
+```
+
+---
+
+# 🔌 Optional Repowise Integration
+
+Repowise adds repository intelligence capabilities including:
+
+* Repository health reports
+* AI-assisted refactoring
+* Commit protection
+* Code health analysis
+
+Install:
+
+```bash
+pip install repowise
+```
+
+Then verify:
+
+```text
+/doctor
+```
+
+Core TermiCode functionality works without Repowise.
+
+---
+
+# 📖 Commands
+
+| Command            | Description                           |
+| ------------------ | ------------------------------------- |
+| `/help`            | Show available commands               |
+| `/map`             | Display project structure             |
+| `/doctor`          | Check local environment               |
+| `/model`           | Manage AI model selection             |
+| `/stats`           | Show token usage and cost             |
+| `/heal <file>`     | AI-assisted file repair *(Repowise)*  |
+| `/report`          | Repository health report *(Repowise)* |
+| `/guard on/off`    | Git commit protection *(Repowise)*    |
+| `/approve on/off`  | Toggle file auto-approval             |
+| `/undo <file>`     | Restore latest backup                 |
+| `/ripple <prompt>` | Multi-file architectural changes      |
+| `/reset`           | Reset current session                 |
+| `/clear`           | Clear terminal                        |
+| `/exit`            | Exit TermiCode                        |
+
+---
+
+# 🧪 Development
+
+Clone the repository:
+
+```bash
+git clone https://github.com/parthpathakpp29/termicode.git
+
+cd termicode
+
+python -m venv .venv
+
+source .venv/bin/activate
+
+pip install -e .[dev]
+```
+
+Run tests:
 
 ```bash
 pytest
 ```
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for full setup instructions, what the test suite expects, and code style notes.
+---
 
-## 🤝 Contributing
+# 📚 Documentation
 
-TermiCode is designed to be a community-driven project, and we welcome contributions from students and beginner developers - you do not need to be an expert to help. Fixing a small bug, adding a test, or improving documentation are all genuinely useful.
+| Document                | Description                              |
+| ----------------------- | ---------------------------------------- |
+| `ARCHITECTURE.md`       | Codebase architecture and execution flow |
+| `CONTRIBUTING.md`       | Contribution guide                       |
+| `CHANGELOG.md`          | Release history                          |
+| `SECURITY.md`           | Security reporting policy                |
+| `CODE_OF_CONDUCT.md`    | Community guidelines                     |
+| `docs/model-routing.md` | Model routing system                     |
+| `docs/tool-system.md`   | Tool execution architecture              |
+| `docs/sessions.md`      | Session persistence                      |
+| `docs/file-editing.md`  | File editing workflow                    |
+| `docs/approval-flow.md` | Approval and safety model                |
 
-See **[CONTRIBUTING.md](CONTRIBUTING.md)** for setup, the development workflow, PR guidelines, and where to start if you're not sure what to work on. If you want to understand how the pieces fit together before making a change, start with **[ARCHITECTURE.md](ARCHITECTURE.md)**.
+---
 
-If you are unsure where to start, open an issue and say you would like to help. We will be happy to guide you.
+# 🤝 Contributing
 
-## 📄 License
+Contributions are welcome.
 
-This project is licensed under the MIT License. See [LICENSE](LICENSE) for the full text.
+Whether you're fixing a bug, improving documentation, adding tests, or implementing a new feature, we'd love your help.
+
+Before opening large feature PRs, please open an issue to discuss the proposal.
+
+See **CONTRIBUTING.md** for setup instructions and contribution guidelines.
+
+---
+
+# 📄 License
+
+Licensed under the **MIT License**.
+
+See **LICENSE** for details.
