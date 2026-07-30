@@ -31,6 +31,9 @@ It helps you inspect a repository, make safe code changes, and run lightweight a
 - [docs/sessions.md](docs/sessions.md) - where conversation history and memory live on disk, and how context pruning works
 - [docs/file-editing.md](docs/file-editing.md) - the sandbox boundary, backups, and `/undo`
 - [docs/approval-flow.md](docs/approval-flow.md) - the diff-preview and `y/N/a` approval prompt, and why `run_command` never auto-approves
+- [CHANGELOG.md](CHANGELOG.md) - what changed release over release
+- [SECURITY.md](SECURITY.md) - how to report a vulnerability, and what's in scope
+- [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) - community expectations
 
 ## 🚀 Installation
 
